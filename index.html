@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#3182f6">
+<title>공모주 트래커</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><defs><linearGradient id='grad' x1='0%' y1='0%' x2='100%' y2='100%'><stop offset='0%' style='stop-color:%233182f6;stop-opacity:1' /><stop offset='100%' style='stop-color:%233182f6;stop-opacity:1' /></linearGradient></defs><rect width='200' height='200' fill='%23ffffff' rx='40'/><circle cx='100' cy='100' r='90' fill='url(%23grad)' opacity='0.1'/><text x='100' y='125' font-family='system-ui, sans-serif' font-size='72' font-weight='800' fill='%233182f6' text-anchor='middle' letter-spacing='-2'>IPO</text></svg>">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#f2f4f6;--card:#fff;--text:#191f28;--text2:#4e5968;--text3:#8b95a1;--text4:#c9cdd2;--blue:#3182f6;--blue-bg:#eff6ff;--red:#ff4747;--red-bg:#fff5f5;--green:#10b981;--purple:#8b5cf6;--border:#f2f4f6;--input-bg:#f8f9fa;--divider:#e5e8eb}
+[data-theme="dark"]{--bg:#17171c;--card:#232329;--text:#e4e4e7;--text2:#a1a1aa;--text3:#71717a;--text4:#52525b;--blue:#60a5fa;--blue-bg:rgba(96,165,250,.12);--red:#f87171;--red-bg:rgba(248,113,113,.12);--green:#34d399;--purple:#a78bfa;--border:#2e2e35;--input-bg:#2a2a31;--divider:#3a3a42}
+html,body{height:100%;font-family:'Noto Sans KR',sans-serif;background:var(--bg);color:var(--text);-webkit-tap-highlight-color:transparent;overflow:hidden}
+.lock-screen{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px}
+.lock-box{background:var(--card);border:1px solid var(--divider);border-radius:20px;padding:28px 24px;width:320px;max-width:90vw;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.06)}
+.lock-input-row{display:flex;gap:8px;justify-content:center;margin-bottom:16px}
+.lock-digit{width:42px;height:50px;background:var(--input-bg);border:1.5px solid var(--divider);border-radius:12px;color:var(--text);font-family:inherit;font-size:22px;font-weight:700;text-align:center;outline:none}
+.lock-digit:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(49,130,246,.12)}
+.lock-btn{width:100%;padding:14px;background:var(--blue);color:#fff;border:none;border-radius:14px;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.lock-btn:disabled{opacity:.35}
+.lock-error{font-size:12px;color:var(--red);margin-top:12px;min-height:18px}
+.lock-shake{animation:shake .4s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+</style>
+</head>
+<body>
+<div class="lock-screen" id="lockScreen">
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+    <div style="font-size:56px">📈</div>
+    <div style="font-size:22px;font-weight:800">공모주 트래커</div>
+    <div style="font-size:12px;color:var(--text3)">공모주 수익을 체계적으로 관리하기!</div>
+  </div>
+  <div class="lock-box">
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:4px">🔐 활성화 코드 입력</h3>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:20px">6자리 코드를 입력해주세요</div>
+    <div class="lock-input-row">
+      <input class="lock-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="lock-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="lock-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="lock-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="lock-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+      <input class="lock-digit" type="tel" maxlength="1" inputmode="numeric" autocomplete="off">
+    </div>
+    <button class="lock-btn" id="lockSubmit" disabled>활성화</button>
+    <div class="lock-error" id="lockError"></div>
+  </div>
+  <div style="font-size:11px;color:var(--text4)">code by 멍멍짱구</div>
+</div>
+<div id="root" style="display:none"></div>
+<script>
+(function(){
+  var SECRET='IPO-Tracker-Key-2026!';
+  // Apply saved theme on load
+  try{var st=localStorage.getItem('ipo_theme');if(st==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}
+  function simpleHash(str){var h1=0xdeadbeef,h2=0x41c6ce57;for(var i=0;i<str.length;i++){var ch=str.charCodeAt(i);h1=Math.imul(h1^ch,2654435761);h2=Math.imul(h2^ch,1597334677)}h1=Math.imul(h1^(h1>>>16),2246822507);h1^=Math.imul(h2^(h2>>>13),3266489909);h2=Math.imul(h2^(h2>>>16),2246822507);h2^=Math.imul(h1^(h1>>>13),3266489909);return(4294967296*(2097151&h2)+(h1>>>0))}
+  function dailyCode(){var d=new Date(),ds=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');return String(Math.abs(simpleHash(ds+'|'+SECRET))%1000000).padStart(6,'0')}
+  var digits=document.querySelectorAll('.lock-digit'),sub=document.getElementById('lockSubmit'),err=document.getElementById('lockError'),ls=document.getElementById('lockScreen'),root=document.getElementById('root');
+  try{if(localStorage.getItem('ipo_unlocked')==='1'){ls.style.display='none';root.style.display='';return}}catch(e){}
+  digits[0].focus();
+  for(var idx=0;idx<digits.length;idx++){(function(i){var inp=digits[i];
+    inp.addEventListener('input',function(e){var v=e.target.value.replace(/\D/g,'');e.target.value=v.slice(-1);if(v&&i<5)digits[i+1].focus();upd()});
+    inp.addEventListener('keydown',function(e){if(e.key==='Backspace'&&!e.target.value&&i>0){digits[i-1].focus();digits[i-1].value=''}if(e.key==='Enter')tryU()});
+    inp.addEventListener('paste',function(e){e.preventDefault();var t=(e.clipboardData||window.clipboardData).getData('text').replace(/\D/g,'').slice(0,6);for(var j=0;j<6;j++)digits[j].value=t[j]||'';if(t.length>0)digits[Math.min(t.length,5)].focus();upd()});
+  })(idx)}
+  function gc(){var r='';for(var i=0;i<digits.length;i++)r+=digits[i].value;return r}
+  function upd(){sub.disabled=gc().length<6}
+  sub.onclick=tryU;
+  function tryU(){var e=gc();if(e.length<6)return;if(e===dailyCode()){try{localStorage.setItem('ipo_unlocked','1')}catch(ex){}ls.style.display='none';root.style.display=''}else{err.textContent='코드가 일치하지 않습니다';document.querySelector('.lock-box').classList.add('lock-shake');setTimeout(function(){document.querySelector('.lock-box').classList.remove('lock-shake');for(var i=0;i<digits.length;i++)digits[i].value='';digits[0].focus();upd()},500);setTimeout(function(){err.textContent=''},3000)}}
+})();
+</script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const{useState,useEffect,useMemo,useRef,useCallback}=React;
+const ALARM_TIMES=["07:00","07:30","08:00","08:30","08:45","08:50"];
+const STATUS_LIST=["환불대기","상장대기","매도완료","정산완료"];
+const SM={"환불대기":{bg:"#fff7ed",text:"#c2410c",dot:"#fb923c"},"상장대기":{bg:"#eff6ff",text:"#1d4ed8",dot:"#60a5fa"},"매도완료":{bg:"#f0fdf4",text:"#15803d",dot:"#4ade80"},"정산완료":{bg:"#f8fafc",text:"#475569",dot:"#94a3b8"}};
+const SM_DARK={"환불대기":{bg:"rgba(251,146,60,.12)",text:"#fb923c",dot:"#fb923c"},"상장대기":{bg:"rgba(96,165,250,.12)",text:"#60a5fa",dot:"#60a5fa"},"매도완료":{bg:"rgba(74,222,128,.12)",text:"#4ade80",dot:"#4ade80"},"정산완료":{bg:"rgba(148,163,184,.12)",text:"#94a3b8",dot:"#94a3b8"}};
+const BROKERS=["미래에셋증권","키움증권","KB증권","NH투자증권","삼성증권","한국투자증권","신한투자증권","대신증권","하나증권","메리츠증권","교보증권","유안타증권","IBK투자증권","이베스트투자증권","카카오페이증권","토스증권","기타"];
+const KEY="ipo_v5";
+const EMPTY={date:"",name:"",broker:"",shares:"",ipo_price:"",sell_price:"",fee:"2,000",tax:"",refund:"",interest:"",status:"환불대기",note:"",alarmTime:""};
+const toNum=v=>Number(String(v).replace(/,/g,""))||0;
+const fmt=v=>{const x=toNum(v);return x?x.toLocaleString("ko-KR"):"-"};
+const calcRow=r=>{const d=toNum(r.shares),e=toNum(r.ipo_price),f=toNum(r.sell_price),h=toNum(r.fee),i=toNum(r.tax),j=e*d,g=f*d,k=g-h-i-j,l=toNum(r.interest),m=k-l;return{g,j,k,m}};
+const pct=(m,b)=>(!b||!m||isNaN(m))?null:((m/b)*100).toFixed(1);
+const saveData=d=>{try{localStorage.setItem(KEY,JSON.stringify(d))}catch(e){}};
+const loadData=()=>{try{const d=localStorage.getItem(KEY);return d?JSON.parse(d):[]}catch(e){return[]}};
+function getSM(dark){return dark?SM_DARK:SM}
+function playAlarm(){try{const c=new(window.AudioContext||window.webkitAudioContext)();for(let i=0;i<3;i++){const o=c.createOscillator(),g=c.createGain();o.connect(g);g.connect(c.destination);const t=c.currentTime+i*.4;o.frequency.setValueAtTime(800,t);o.frequency.exponentialRampToValueAtTime(600,t+.1);g.gain.setValueAtTime(.3,t);g.gain.exponentialRampToValueAtTime(.01,t+.3);o.start(t);o.stop(t+.3)}}catch(e){}}
+function checkAlarmList(list){const now=new Date(),hh=String(now.getHours()).padStart(2,"0"),mm=String(now.getMinutes()).padStart(2,"0"),today=now.toISOString().split("T")[0];list.forEach(t=>{if(t.alarmTime&&t.date===today&&t.status==="상장대기"){const[aH,aM]=t.alarmTime.split(":");const aNum=parseInt(aH)*60+parseInt(aM),nNum=parseInt(hh)*60+parseInt(mm);if(nNum===aNum||(nNum===aNum+1&&now.getSeconds()<30)){const key=`alarm_${t.id}_${today}`;if(!sessionStorage.getItem(key)){playAlarm();if("Notification"in window&&Notification.permission==="granted")new Notification("🚀 공모주 상장 알림!",{body:`${t.name}이(가) 상장되었습니다!`});sessionStorage.setItem(key,"true")}}}})}
+function dlFile(blob,name){const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a)}
+function doExportCSV(data){if(!data.length){alert("내보낼 데이터가 없습니다!");return}const hd=["상장일","공모주명","증권사","배정주","확정공모가(원)","매도가격(원)","수수료(원)","제세금(원)","반납원금(원)","대출이자(원)","투자금(원)","매도금(원)","실제수익(원)","최종수익(원)","수익률(%)","진행상태","비고"];const rows=data.map(t=>{const c=calcRow(t),inv=toNum(t.ipo_price)*toNum(t.shares),p=pct(c.m,inv);return[t.date,t.name,t.broker,toNum(t.shares),toNum(t.ipo_price),toNum(t.sell_price),toNum(t.fee),toNum(t.tax),toNum(t.refund),toNum(t.interest),inv,c.g,c.k,c.m,p||"-",t.status,t.note]});const csv="\uFEFF"+[hd.map(x=>`"${x}"`).join(","),...rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(","))].join("\n");dlFile(new Blob([csv],{type:"text/csv;charset=utf-8;"}),"공모주_수익_"+new Date().toISOString().split("T")[0]+".csv")}
+function doExportJSON(data){if(!data.length){alert("내보낼 데이터가 없습니다!");return}dlFile(new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),"공모주_백업_"+new Date().toISOString().split("T")[0]+".json")}
+function doImportFile(file){return new Promise((res,rej)=>{const reader=new FileReader();reader.onload=e=>{try{const txt=e.target.result;if(file.name.endsWith(".json")){const d=JSON.parse(txt);if(Array.isArray(d)&&d.length)res(d);else rej(new Error("유효한 JSON이 아닙니다"))}else{const lines=txt.split("\n").filter(l=>l.trim());if(lines.length<2){rej(new Error("유효한 CSV가 아닙니다"));return}const headers=lines[0].replace(/^\uFEFF/,"").split(",").map(x=>x.replace(/"/g,"").trim());const gi=n=>headers.findIndex(x=>x.includes(n));const parsed=[];for(let i=1;i<lines.length;i++){let row=[],cur="",inQ=false;for(let j=0;j<lines[i].length;j++){const ch=lines[i][j];if(ch==='"'){if(inQ&&lines[i][j+1]==='"'){cur+='"';j++}else inQ=!inQ}else if(ch===","&&!inQ){row.push(cur.trim());cur=""}else cur+=ch}row.push(cur.trim());if(row[gi("상장일")]&&row[gi("공모주명")]){parsed.push({id:Date.now()+i,date:row[gi("상장일")],name:row[gi("공모주명")],broker:row[gi("증권사")]||"",shares:row[gi("배정주")]||"",ipo_price:row[gi("확정공모가")]||"",sell_price:row[gi("매도가격")]||"",fee:row[gi("수수료")]||"2,000",tax:row[gi("제세금")]||"",refund:row[gi("반납원금")]||"",interest:row[gi("대출이자")]||"",status:row[gi("진행상태")]||"환불대기",note:row[gi("비고")]||"",alarmTime:""})}}if(!parsed.length)rej(new Error("데이터 없음"));else res(parsed)}}catch(err){rej(err)}};reader.onerror=()=>rej(new Error("파일 읽기 실패"));reader.readAsText(file)})}
+function CommaInput({value,onChange,placeholder,style:extraStyle}){return<input type="text" inputMode="numeric" style={{...S.input,...(extraStyle||{})}} value={value} placeholder={placeholder} onChange={e=>{const raw=e.target.value.replace(/,/g,"").replace(/[^0-9]/g,"");onChange(raw?Number(raw).toLocaleString("ko-KR"):"")}}/>}
+function BottomSheet({children,onClose}){return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:200,display:"flex",flexDirection:"column",justifyContent:"flex-end"}} onClick={e=>{if(e.target===e.currentTarget)onClose()}}><div style={{background:"var(--card)",borderRadius:"24px 24px 0 0",padding:"24px 20px 44px",maxHeight:"85vh",overflowY:"auto"}}><div style={{width:36,height:4,background:"var(--divider)",borderRadius:2,margin:"0 auto 20px"}}/>{children}</div></div>}
+function StatusPicker({value,onChange,onClose,dark}){const sm=getSM(dark);return<BottomSheet onClose={onClose}><div style={{fontSize:16,fontWeight:700,marginBottom:18}}>진행상태 변경</div>{STATUS_LIST.map(st=><button key={st} onClick={()=>{onChange(st);onClose()}} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"15px 0",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"inherit"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:10,height:10,borderRadius:"50%",background:sm[st].dot}}/><span style={{fontSize:15,fontWeight:value===st?700:400,color:"var(--text)"}}>{st}</span></div>{value===st&&<span style={{color:"var(--blue)",fontSize:18,fontWeight:700}}>✓</span>}</button>)}</BottomSheet>}
+function ExportPicker({onSelect,onClose}){return<BottomSheet onClose={onClose}><div style={{fontSize:16,fontWeight:700,marginBottom:18}}>📊 어떤 형식으로 추출할까요?</div><button onClick={()=>{onSelect("csv");onClose()}} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",width:"100%",padding:16,background:"var(--input-bg)",border:"none",borderRadius:14,cursor:"pointer",marginBottom:10,fontFamily:"inherit"}}><div style={{fontSize:15,fontWeight:700,marginBottom:4,color:"var(--text)"}}>📊 CSV (엑셀)</div><div style={{fontSize:12,color:"var(--text3)"}}>표 형식 · 엑셀에서 쉽게 확인</div></button><button onClick={()=>{onSelect("json");onClose()}} style={{display:"flex",flexDirection:"column",alignItems:"flex-start",width:"100%",padding:16,background:"var(--input-bg)",border:"none",borderRadius:14,cursor:"pointer",marginBottom:12,fontFamily:"inherit"}}><div style={{fontSize:15,fontWeight:700,marginBottom:4,color:"var(--text)"}}>📋 JSON (완벽 백업)</div><div style={{fontSize:12,color:"var(--text3)"}}>원본 데이터 그대로 · 손실 없음</div></button><button onClick={onClose} style={{width:"100%",padding:15,fontSize:15,fontWeight:600,borderRadius:14,border:"none",cursor:"pointer",background:"var(--bg)",color:"var(--text2)",fontFamily:"inherit"}}>취소</button></BottomSheet>}
+function ImportPicker({onImport,onClose}){const ref=useRef(null);const[busy,setBusy]=useState(false);const handle=async e=>{const f=e.target.files?.[0];if(!f)return;setBusy(true);try{const t=await doImportFile(f);onImport(t);onClose()}catch(err){alert("❌ "+err.message);setBusy(false)}};return<BottomSheet onClose={onClose}><div style={{fontSize:16,fontWeight:700,marginBottom:8}}>📤 백업에서 복구</div><div style={{fontSize:12,color:"var(--text3)",marginBottom:20}}>CSV 또는 JSON 파일을 선택하세요</div><input ref={ref} type="file" accept=".csv,.json" onChange={handle} style={{display:"none"}}/><button onClick={()=>ref.current?.click()} disabled={busy} style={{width:"100%",padding:15,fontSize:15,fontWeight:600,borderRadius:14,border:"none",cursor:"pointer",background:"var(--blue)",color:"#fff",fontFamily:"inherit",marginBottom:8}}>{busy?"불러오는 중...":"📂 파일 선택 (CSV / JSON)"}</button><button onClick={onClose} style={{width:"100%",padding:15,fontSize:15,fontWeight:600,borderRadius:14,border:"none",cursor:"pointer",background:"var(--bg)",color:"var(--text2)",fontFamily:"inherit"}}>취소</button></BottomSheet>}
+function StatusCard({trades:tr,dark}){const sm=getSM(dark);return<div style={S.card}><div style={{fontSize:13,fontWeight:600,color:"var(--text3)",marginBottom:4}}>진행상태별</div>{STATUS_LIST.map((st,i)=>{const cnt=tr.filter(t=>t.status===st).length;const sum=tr.filter(t=>t.status===st).reduce((a,t)=>a+((st==="매도완료"||st==="정산완료")?calcRow(t).m:0),0);const isDone=st==="매도완료"||st==="정산완료";return<div key={st} style={{borderBottom:i===3?"none":"1px solid var(--border)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 0"}}><div style={{display:"flex",alignItems:"center",gap:10}}><div style={{width:8,height:8,borderRadius:"50%",background:sm[st].dot}}/><span style={{fontSize:15}}>{st}</span><span style={{fontSize:13,color:"var(--text4)"}}>{cnt}건</span></div>{isDone&&cnt>0&&<span style={{fontSize:15,fontWeight:700,color:sum>=0?"var(--blue)":"var(--red)"}}>{(sum>=0?"+":"")+sum.toLocaleString("ko-KR")}원</span>}</div></div>})}</div>}
+
+function CalendarTab({trades:tr,onEdit,dark}){
+const sm=getSM(dark);
+const[cY,setCY]=useState(new Date().getFullYear());
+const[cM,setCM]=useState(new Date().getMonth());
+const[sel,setSel]=useState(null);
+const[monthListOpen,setMonthListOpen]=useState(true);
+const dim=new Date(cY,cM+1,0).getDate();
+const fdow=new Date(cY,cM,1).getDay();
+const todayStr=useMemo(()=>{const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`},[]);
+const byDate=useMemo(()=>{const m={};tr.forEach(t=>{if(t.date){if(!m[t.date])m[t.date]=[];m[t.date].push(t)}});return m},[tr]);
+const prev=()=>{if(cM===0){setCM(11);setCY(y=>y-1)}else setCM(m=>m-1);setSel(null)};
+const next=()=>{if(cM===11){setCM(0);setCY(y=>y+1)}else setCM(m=>m+1);setSel(null)};
+const cells=[];for(let i=0;i<fdow;i++)cells.push(null);for(let d=1;d<=dim;d++)cells.push(d);
+const selTrades=sel?(byDate[sel]||[]):[];
+const monthKey=`${cY}-${String(cM+1).padStart(2,"0")}`;
+const monthTr=tr.filter(t=>t.date&&t.date.startsWith(monthKey)).slice().sort((a,b)=>new Date(a.date)-new Date(b.date));
+const doneTr=monthTr.filter(t=>t.status==="매도완료"||t.status==="정산완료");
+const mp=doneTr.reduce((a,t)=>a+calcRow(t).m,0);
+const pc=monthTr.filter(t=>t.status==="환불대기"||t.status==="상장대기").length;
+
+const renderTradeItem=(t)=>{const{m}=calcRow(t);const isDone=t.status==="매도완료"||t.status==="정산완료";return<div key={t.id} style={{...S.card,cursor:"pointer"}} onClick={()=>onEdit(t)}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:15,fontWeight:700,marginBottom:2}}>{t.name}</div><div style={{fontSize:12,color:"var(--text3)"}}>{t.broker} · {fmt(t.shares)}주</div></div><div style={{textAlign:"right"}}><div style={{display:"inline-flex",alignItems:"center",gap:4,padding:"3px 8px",borderRadius:12,background:sm[t.status].bg}}><div style={{width:6,height:6,borderRadius:"50%",background:sm[t.status].dot}}/><span style={{fontSize:11,color:sm[t.status].text,fontWeight:600}}>{t.status}</span></div>{isDone&&<div style={{fontSize:14,fontWeight:700,color:m>=0?"var(--blue)":"var(--red)",marginTop:4}}>{(m>=0?"+":"")+m.toLocaleString("ko-KR")}원</div>}</div></div></div>};
+
+return<><div style={{...S.card,padding:"16px 20px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}><button onClick={prev} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"4px 12px",color:"var(--text3)"}}>‹</button><div style={{fontSize:17,fontWeight:700}}>{cY}년 {cM+1}월</div><button onClick={next} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"4px 12px",color:"var(--text3)"}}>›</button></div><div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:4}}>{["일","월","화","수","목","금","토"].map((d,i)=><div key={d} style={{textAlign:"center",fontSize:11,fontWeight:600,padding:"6px 0",color:i===0?"var(--red)":i===6?"#60a5fa":"var(--text3)"}}>{d}</div>)}</div><div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>{cells.map((day,idx)=>{if(day===null)return<div key={"e"+idx}/>;const ds=`${cY}-${String(cM+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;const has=byDate[ds];const isToday=ds===todayStr;const isSel=ds===sel;const dow=idx%7;return<button key={ds} onClick={()=>setSel(isSel?null:ds)} style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"8px 2px",minHeight:44,background:isSel?"var(--blue)":isToday?"var(--blue-bg)":"transparent",border:"none",borderRadius:10,cursor:"pointer",fontFamily:"inherit"}}><span style={{fontSize:13,fontWeight:isToday||isSel?700:400,color:isSel?"#fff":isToday?"var(--blue)":dow===0?"var(--red)":dow===6?"#60a5fa":"var(--text)"}}>{day}</span>{has&&<div style={{display:"flex",gap:2,marginTop:3}}>{has.slice(0,3).map((t,i)=><div key={i} style={{width:5,height:5,borderRadius:"50%",background:isSel?"rgba(255,255,255,.8)":sm[t.status].dot}}/>)}</div>}</button>})}</div></div>
+
+{/* 날짜 선택 시 해당 날짜 거래 표시 */}
+{sel&&<><div style={{padding:"8px 4px",fontSize:13,fontWeight:600,color:"var(--text3)"}}>📅 {sel} ({selTrades.length}건)</div>{!selTrades.length?<div style={{...S.card,textAlign:"center",padding:"30px 0",color:"var(--text4)"}}><div style={{fontSize:28,marginBottom:8}}>📭</div><div style={{fontSize:13}}>이 날짜에 거래가 없어요</div></div>:selTrades.map(renderTradeItem)}</>}
+
+{/* 날짜 미선택 시 월 요약 + 월간 거래목록 */}
+{!sel&&<>
+<div style={S.card}><div style={{fontSize:13,fontWeight:600,color:"var(--text3)",marginBottom:12}}>📊 {cM+1}월 요약</div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}><div style={{textAlign:"center",borderRadius:12,padding:"14px 8px",background:"var(--input-bg)"}}><div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>총 거래</div><div style={{fontSize:18,fontWeight:700}}>{monthTr.length}건</div></div><div style={{textAlign:"center",borderRadius:12,padding:"14px 8px",background:mp>=0?"var(--blue-bg)":"var(--red-bg)"}}><div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>수익</div><div style={{fontSize:16,fontWeight:700,color:mp>=0?"var(--blue)":"var(--red)"}}>{mp===0?"-":(mp>0?"+":"")+Math.round(mp/10000)+"만"}</div></div><div style={{textAlign:"center",borderRadius:12,padding:"14px 8px",background:"rgba(251,146,60,.08)"}}><div style={{fontSize:11,color:"var(--text3)",marginBottom:4}}>진행중</div><div style={{fontSize:18,fontWeight:700,color:"#fb923c"}}>{pc}건</div></div></div></div>
+
+{/* 월간 거래목록 토글 */}
+<button onClick={()=>setMonthListOpen(o=>!o)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",padding:"10px 4px",background:"none",border:"none",cursor:"pointer",fontFamily:"inherit"}}><span style={{fontSize:13,fontWeight:600,color:"var(--text3)"}}>📋 {cM+1}월 거래목록 ({monthTr.length}건)</span><span style={{fontSize:14,color:"var(--text4)",transform:monthListOpen?"rotate(180deg)":"rotate(0deg)",transition:"transform .2s"}}>▼</span></button>
+{monthListOpen&&<>{!monthTr.length?<div style={{...S.card,textAlign:"center",padding:"30px 0",color:"var(--text4)"}}><div style={{fontSize:28,marginBottom:8}}>📭</div><div style={{fontSize:13}}>이 달에 거래가 없어요</div></div>:monthTr.map(renderTradeItem)}</>}
+</>}
+</>}
+
+const S={card:{background:"var(--card)",borderRadius:16,padding:20,marginBottom:10},input:{width:"100%",boxSizing:"border-box",padding:"12px 12px",fontSize:14,border:"none",borderRadius:10,background:"var(--input-bg)",color:"var(--text)",outline:"none",fontFamily:"inherit"},select:{width:"100%",boxSizing:"border-box",padding:"12px 12px",fontSize:14,border:"none",borderRadius:10,background:"var(--input-bg)",color:"var(--text)",outline:"none",appearance:"none",fontFamily:"inherit",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b95a1' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 14px center"},label:{fontSize:11,color:"var(--text3)",fontWeight:500,display:"block",marginBottom:4},btn:v=>({flex:1,padding:15,fontSize:15,fontWeight:600,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"inherit",background:v==="p"?"var(--blue)":v==="d"?"var(--red)":"var(--bg)",color:v==="s"?"var(--text2)":"#fff"}),chip:(st,active,dark)=>{const sm=getSM(dark);return{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,padding:"4px 10px",borderRadius:20,background:active?sm[st]?.bg||"var(--blue-bg)":"var(--bg)",color:active?sm[st]?.text||"var(--blue)":"var(--text3)",fontWeight:active?600:400,cursor:"pointer",border:"none",whiteSpace:"nowrap",fontFamily:"inherit"}}};
+
+function App(){
+const[trades,setTrades]=useState(()=>loadData());
+const[tab,setTab]=useState("dashboard");
+const[form,setForm]=useState(EMPTY);
+const[editId,setEditId]=useState(null);
+const[showForm,setShowForm]=useState(false);
+const[deleteId,setDeleteId]=useState(null);
+const[filterStatus,setFilterStatus]=useState("전체");
+const[editYear,setEditYear]=useState(false);
+const[year,setYear]=useState(()=>new Date().getFullYear());
+const[statusPickFor,setStatusPickFor]=useState(null);
+const[showExport,setShowExport]=useState(false);
+const[showImport,setShowImport]=useState(false);
+const[showSettings,setShowSettings]=useState(false);
+const[dark,setDark]=useState(()=>{try{return localStorage.getItem('ipo_theme')==='dark'}catch(e){return false}});
+
+const toggleTheme=()=>{const next=!dark;setDark(next);document.documentElement.setAttribute('data-theme',next?'dark':'');try{localStorage.setItem('ipo_theme',next?'dark':'light')}catch(e){}};
+
+useEffect(()=>{saveData(trades)},[trades]);
+useEffect(()=>{checkAlarmList(trades);const iv=setInterval(()=>checkAlarmList(trades),60000);return()=>clearInterval(iv)},[trades]);
+useEffect(()=>{if("Notification"in window&&Notification.permission==="default")Notification.requestPermission()},[]);
+
+// 반납원금 자동계산 (확정공모가 x 배정주, 수동 입력 안했을 때)
+const autoRefund=useMemo(()=>{const v=toNum(form.ipo_price)*toNum(form.shares);return v?v.toLocaleString("ko-KR"):"";},[form.ipo_price,form.shares]);
+
+const monthly=useMemo(()=>{const m=Array(12).fill(0);trades.forEach(t=>{if((t.status==="정산완료"||t.status==="매도완료")&&t.date&&new Date(t.date).getFullYear()===year)m[new Date(t.date).getMonth()]+=calcRow(t).m||0});return m},[trades,year]);
+const totalProfit=monthly.reduce((a,b)=>a+b,0);
+const filtered=(filterStatus==="전체"?trades:trades.filter(t=>t.status===filterStatus)).slice().sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
+const totFiltered=filtered.reduce((a,t)=>{const{m}=calcRow(t);return(t.status==="환불대기"||t.status==="상장대기")?a:a+m},0);
+const maxBar=Math.max(...monthly.map(Math.abs),1);
+const c=calcRow(form);
+const sm=getSM(dark);
+
+const openAdd=()=>{setForm(EMPTY);setEditId(null);setShowForm(true)};
+const openEdit=t=>{setForm({...t});setEditId(t.id);setShowForm(true)};
+const hfc=(k,v)=>setForm(f=>({...f,[k]:v}));
+const handleSave=()=>{
+  if(!form.name||!form.date)return;
+  // 반납원금 자동채우기: 수동 입력 안했으면 자동계산값 넣기
+  let finalForm={...form};
+  if(!toNum(form.refund)&&autoRefund){finalForm.refund=autoRefund}
+  if(editId!==null)setTrades(ts=>ts.map(t=>t.id===editId?{...finalForm,id:editId}:t));
+  else setTrades(ts=>[{...finalForm,id:Date.now()},...ts]);
+  setShowForm(false);setEditId(null);
+};
+const handleDelete=id=>{setTrades(ts=>ts.filter(t=>t.id!==id));setDeleteId(null)};
+const quickStatus=(id,st)=>{setTrades(ts=>ts.map(t=>t.id===id?{...t,status:st}:t));setStatusPickFor(null)};
+const handleImport=imported=>{if(trades.length>0){if(confirm(`기존 ${trades.length}건 있어요.\n[확인] 병합 / [취소] 덮어쓰기`))setTrades(ts=>[...imported,...ts]);else setTrades(imported)}else setTrades(imported);alert(`✅ ${imported.length}건 가져왔어요!`)};
+const handleExport=type=>{type==="csv"?doExportCSV(trades):doExportJSON(trades)};
+
+return<div style={{display:"flex",flexDirection:"column",height:"100vh",maxWidth:480,margin:"0 auto",background:"var(--bg)"}}>
+
+{/* ===== 상단 헤더 (컴팩트) ===== */}
+<div style={{background:"var(--card)",padding:"12px 20px 0",borderBottom:"1px solid var(--border)",flexShrink:0}}>
+{/* 1행: 연도 타이틀 + 아이콘 버튼들 */}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+  <div style={{fontSize:13,color:"var(--text3)",fontWeight:500,display:"flex",alignItems:"center",gap:5}}>
+    {editYear?<input type="number" defaultValue={year} autoFocus onBlur={e=>{setYear(Number(e.target.value)||year);setEditYear(false)}} onKeyDown={e=>{if(e.key==="Enter"){setYear(Number(e.target.value)||year);setEditYear(false)}}} style={{width:58,fontSize:13,border:"none",borderBottom:"1.5px solid var(--blue)",outline:"none",background:"transparent",color:"var(--blue)",fontWeight:700,padding:"0 2px",fontFamily:"inherit"}}/>:<span onClick={()=>setEditYear(true)} style={{cursor:"pointer",color:"var(--blue)",fontWeight:700,borderBottom:"1px dashed #93c5fd"}}>{year}년</span>}
+    <span>공모주 수익 현황</span>
+  </div>
+  <div style={{display:"flex",gap:6}}>
+    <button onClick={toggleTheme} style={{background:"var(--input-bg)",border:"none",borderRadius:10,width:34,height:34,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} title={dark?"라이트 모드":"다크 모드"}>{dark?"☀️":"🌙"}</button>
+    <button onClick={()=>setShowSettings(true)} style={{background:"var(--input-bg)",border:"none",borderRadius:10,width:34,height:34,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}} title="설정">⚙️</button>
+  </div>
+</div>
+{/* 2행: 수익금 + 새 거래 추가 버튼 */}
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+  <div>
+    <div style={{fontSize:24,fontWeight:800,letterSpacing:-.5,color:totalProfit<0?"var(--red)":"var(--text)"}}>{totalProfit===0?"0원":(totalProfit>0?"+":"")+totalProfit.toLocaleString("ko-KR")+"원"}</div>
+    <div style={{fontSize:11,color:"var(--text3)",marginTop:1}}>완료 {trades.filter(t=>t.status==="정산완료"||t.status==="매도완료").length}건 · 진행중 {trades.filter(t=>t.status==="환불대기"||t.status==="상장대기").length}건</div>
+  </div>
+  <button onClick={openAdd} style={{background:"var(--blue)",color:"#fff",border:"none",borderRadius:10,padding:"8px 14px",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit",flexShrink:0,whiteSpace:"nowrap"}}>+ 새 거래</button>
+</div>
+{/* 3행: 탭 */}
+<div style={{display:"flex",marginTop:6}}>{[["dashboard","홈"],["calendar","달력"],["list","거래목록"]].map(([v,l])=><button key={v} onClick={()=>setTab(v)} style={{flex:1,padding:"9px 0",fontSize:14,fontWeight:tab===v?700:500,color:tab===v?"var(--blue)":"var(--text3)",background:"none",border:"none",borderBottom:tab===v?"2.5px solid var(--blue)":"2.5px solid transparent",cursor:"pointer",fontFamily:"inherit"}}>{l}</button>)}</div>
+</div>
+
+{/* ===== 메인 콘텐츠 ===== */}
+<div style={{padding:"12px 14px 60px",overflowY:"auto",flex:1,WebkitOverflowScrolling:"touch"}}>
+
+{tab==="dashboard"&&<><div style={S.card}><div style={{fontSize:13,fontWeight:600,color:"var(--text3)",marginBottom:16}}>월별 수익</div><div style={{display:"flex",alignItems:"flex-end",gap:3,height:90}}>{monthly.map((v,i)=>{const ht=v===0?2:Math.max(4,(Math.abs(v)/maxBar)*72);return<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}><div style={{fontSize:8,color:"var(--text4)",height:12,display:"flex",alignItems:"flex-end"}}>{v&&Math.abs(v)>=10000?Math.round(v/10000)+"만":""}</div><div style={{width:"100%",height:ht,background:v>=0?"var(--blue)":"#ff6b6b",borderRadius:"3px 3px 0 0",opacity:v===0?.15:1}}/><div style={{fontSize:9,color:"var(--text4)"}}>{i+1}</div></div>})}</div></div><StatusCard trades={trades} dark={dark}/></>}
+
+{tab==="calendar"&&<CalendarTab trades={trades} onEdit={openEdit} dark={dark}/>}
+
+{tab==="list"&&<><div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>{["전체",...STATUS_LIST].map(s=><button key={s} onClick={()=>setFilterStatus(s)} style={S.chip(s==="전체"?"매도완료":s,filterStatus===s,dark)}>{s}</button>)}</div>{filtered.length>0&&<div style={{...S.card,padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontSize:13,color:"var(--text3)"}}>{filtered.length}건</span><span style={{fontSize:16,fontWeight:700,color:totFiltered>=0?"var(--blue)":"var(--red)"}}>{totFiltered===0?"집계 대기중":(totFiltered>0?"+":"")+totFiltered.toLocaleString("ko-KR")+"원"}</span></div>}{!filtered.length&&<div style={{textAlign:"center",padding:"60px 0",color:"var(--text4)"}}><div style={{fontSize:40,marginBottom:12}}>📭</div><div style={{fontSize:14}}>거래 내역이 없어요</div></div>}{filtered.map(t=>{const{m}=calcRow(t);const base=toNum(t.ipo_price)*toNum(t.shares);const p=pct(m,base);const isDone=t.status==="매도완료"||t.status==="정산완료";const isPending=t.status==="환불대기"||t.status==="상장대기";return<div key={t.id} style={S.card}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}><div><div style={{fontSize:17,fontWeight:700,marginBottom:3}}>{t.name}</div><div style={{fontSize:12,color:"var(--text3)"}}>{t.date} · {t.broker} · {fmt(t.shares)}주</div>{t.alarmTime&&t.status==="상장대기"&&<div style={{marginTop:6,fontSize:11,color:"var(--blue)",fontWeight:600}}>🔔 {t.alarmTime} 알람 설정됨</div>}</div><button onClick={()=>setStatusPickFor(t.id)} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 10px",borderRadius:20,background:sm[t.status].bg,border:"none",cursor:"pointer"}}><div style={{width:7,height:7,borderRadius:"50%",background:sm[t.status].dot}}/><span style={{fontSize:12,color:sm[t.status].text,fontWeight:600}}>{t.status}</span><span style={{fontSize:10,color:sm[t.status].text,opacity:.6}}>▼</span></button></div><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:2,background:"var(--input-bg)",borderRadius:12,overflow:"hidden",marginBottom:12}}>{[["공모가",fmt(t.ipo_price)+"원"],["배정주",fmt(t.shares)+"주"],["매도가",t.sell_price?fmt(t.sell_price)+"원":"-"],["수수료",fmt(t.fee)+"원"]].map(([l,v])=><div key={l} style={{padding:"10px 12px",background:"var(--card)"}}><div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>{l}</div><div style={{fontSize:13,fontWeight:600}}>{v}</div></div>)}</div>{isDone&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:m>=0?"var(--blue-bg)":"var(--red-bg)",borderRadius:12,padding:"12px 16px",marginBottom:12}}><div><div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>최종수익</div><div style={{fontSize:20,fontWeight:800,color:m>=0?"var(--blue)":"var(--red)"}}>{(m>=0?"+":"")+m.toLocaleString("ko-KR")}원</div></div>{p&&<div style={{textAlign:"right"}}><div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>수익률</div><div style={{fontSize:20,fontWeight:800,color:Number(p)>=0?"var(--blue)":"var(--red)"}}>{(Number(p)>=0?"+":"")+p}%</div></div>}</div>}{isPending&&base>0&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"var(--input-bg)",borderRadius:12,padding:"12px 16px",marginBottom:12}}><div><div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>청약원금</div><div style={{fontSize:18,fontWeight:700}}>{base.toLocaleString("ko-KR")}원</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,color:"var(--text3)",marginBottom:2}}>상태</div><div style={{fontSize:13,fontWeight:600,color:sm[t.status].text}}>{t.status==="환불대기"?"환불 대기중":"상장 대기중"}</div></div></div>}<div style={{display:"flex",gap:8}}><button onClick={()=>openEdit(t)} style={{...S.btn("s"),padding:11,fontSize:13}}>수정</button><button onClick={()=>setDeleteId(t.id)} style={{...S.btn("s"),padding:11,fontSize:13,color:"var(--red)"}}>삭제</button></div></div>})}</>}
+</div>
+
+{/* ===== 모달들 ===== */}
+{statusPickFor&&<StatusPicker value={trades.find(t=>t.id===statusPickFor)?.status} onChange={st=>quickStatus(statusPickFor,st)} onClose={()=>setStatusPickFor(null)} dark={dark}/>}
+{showExport&&<ExportPicker onSelect={handleExport} onClose={()=>setShowExport(false)}/>}
+{showImport&&<ImportPicker onImport={handleImport} onClose={()=>setShowImport(false)}/>}
+{showSettings&&<BottomSheet onClose={()=>setShowSettings(false)}><div style={{fontSize:16,fontWeight:700,marginBottom:18}}>⚙️ 설정</div>{trades.length>0&&<button onClick={()=>{setShowSettings(false);setTimeout(()=>setShowExport(true),200)}} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"14px 0",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"inherit"}}><span style={{fontSize:20}}>📥</span><div style={{textAlign:"left"}}><div style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>데이터 추출</div><div style={{fontSize:12,color:"var(--text3)"}}>CSV 또는 JSON으로 내보내기</div></div></button>}<button onClick={()=>{setShowSettings(false);setTimeout(()=>setShowImport(true),200)}} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"14px 0",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"inherit"}}><span style={{fontSize:20}}>📤</span><div style={{textAlign:"left"}}><div style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>백업 복구</div><div style={{fontSize:12,color:"var(--text3)"}}>CSV 또는 JSON 파일에서 복구</div></div></button><button onClick={()=>setShowSettings(false)} style={{width:"100%",padding:14,fontSize:15,fontWeight:600,borderRadius:14,border:"none",cursor:"pointer",background:"var(--bg)",color:"var(--text2)",fontFamily:"inherit",marginTop:16}}>닫기</button></BottomSheet>}
+
+{/* ===== 새 거래 추가 / 수정 폼 (개선된 레이아웃) ===== */}
+{showForm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+<div style={{background:"var(--card)",borderRadius:"24px 24px 0 0",maxHeight:"92vh",overflowY:"auto",padding:"0 0 40px"}}>
+<div style={{padding:"14px 20px 0"}}>
+<div style={{width:36,height:4,background:"var(--divider)",borderRadius:2,margin:"0 auto 12px"}}/>
+<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+  <span style={{fontSize:17,fontWeight:800}}>{editId?"거래 수정":"새 거래 추가"}</span>
+  <button onClick={()=>{setShowForm(false);setEditId(null)}} style={{background:"var(--bg)",border:"none",borderRadius:10,width:32,height:32,fontSize:16,cursor:"pointer",color:"var(--text3)",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+</div>
+
+{/* 폼 레이아웃: 컴팩트하게 */}
+<div style={{display:"flex",flexDirection:"column",gap:8}}>
+
+{/* 공모주명 (전체 폭) */}
+<div>
+  <label style={S.label}>공모주명 *</label>
+  <input type="text" style={S.input} value={form.name} placeholder="예) 덕양에너젠" onChange={e=>hfc("name",e.target.value)}/>
+</div>
+
+{/* 상장일 + 증권사 (반반) */}
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+  <div><label style={S.label}>상장일 *</label><input type="date" style={S.input} value={form.date} onChange={e=>hfc("date",e.target.value)}/></div>
+  <div><label style={S.label}>증권사</label><select style={S.select} value={form.broker} onChange={e=>hfc("broker",e.target.value)}><option value="">선택</option>{BROKERS.map(b=><option key={b} value={b}>{b}</option>)}</select></div>
+</div>
+
+{/* 확정공모가 + 배정주 (반반) */}
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+  <div><label style={S.label}>확정공모가 (원)</label><CommaInput value={form.ipo_price} onChange={v=>hfc("ipo_price",v)} placeholder="0"/></div>
+  <div><label style={S.label}>배정주</label><CommaInput value={form.shares} onChange={v=>hfc("shares",v)} placeholder="0"/></div>
+</div>
+
+{/* 구분선 */}
+<div style={{borderTop:"1px solid var(--divider)",margin:"4px 0"}}/>
+
+{/* 매도가격 (전체 폭) */}
+<div>
+  <label style={S.label}>매도가격 (원)</label>
+  <CommaInput value={form.sell_price} onChange={v=>hfc("sell_price",v)} placeholder="0"/>
+</div>
+
+{/* 수수료 + 제세금 (반반) */}
+<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+  <div><label style={S.label}>수수료 (원)</label><CommaInput value={form.fee} onChange={v=>hfc("fee",v)} placeholder="2,000"/></div>
+  <div><label style={S.label}>제세금 (원)</label><CommaInput value={form.tax} onChange={v=>hfc("tax",v)} placeholder="0"/></div>
+</div>
+
+{/* 대출이자 (전체 폭) */}
+<div>
+  <label style={S.label}>대출이자 (원)</label>
+  <CommaInput value={form.interest} onChange={v=>hfc("interest",v)} placeholder="0"/>
+</div>
+
+{/* 구분선 */}
+<div style={{borderTop:"1px solid var(--divider)",margin:"4px 0"}}/>
+
+{/* 반납원금 (전체 폭, 자동계산) */}
+<div>
+  <label style={S.label}>반납원금 (=확정공모가×배정주)</label>
+  <CommaInput value={form.refund||autoRefund} onChange={v=>hfc("refund",v)} placeholder={autoRefund||"자동 계산"}/>
+  {autoRefund&&!form.refund&&<div style={{fontSize:10,color:"var(--text4)",marginTop:3}}>자동: {autoRefund}원</div>}
+</div>
+
+{/* 비고 */}
+<div>
+  <label style={S.label}>비고</label>
+  <input type="text" style={S.input} value={form.note} placeholder="메모" onChange={e=>hfc("note",e.target.value)}/>
+</div>
+
+{/* 상장일 알람 (조건부) */}
+{form.date&&form.status==="상장대기"&&<div>
+  <label style={S.label}>🔔 상장일 알람 시간</label>
+  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+    {ALARM_TIMES.map(time=><button key={time} onClick={()=>hfc("alarmTime",form.alarmTime===time?"":time)} style={{padding:"6px 12px",fontSize:12,borderRadius:10,background:form.alarmTime===time?"var(--blue)":"var(--bg)",color:form.alarmTime===time?"#fff":"var(--text3)",border:"none",cursor:"pointer",fontWeight:form.alarmTime===time?700:500,fontFamily:"inherit"}}>{time}</button>)}
+    <button onClick={()=>hfc("alarmTime","")} style={{padding:"6px 12px",fontSize:12,borderRadius:10,background:"var(--bg)",color:"var(--red)",border:"none",cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+  </div>
+  {form.alarmTime&&<div style={{marginTop:6,padding:"8px 10px",background:"var(--blue-bg)",borderRadius:8,fontSize:11,color:"var(--blue)"}}>⏰ {form.date} {form.alarmTime}에 알림</div>}
+</div>}
+
+{/* 진행상태 */}
+<div>
+  <label style={S.label}>진행상태</label>
+  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{STATUS_LIST.map(st=><button key={st} onClick={()=>hfc("status",st)} style={S.chip(st,form.status===st,dark)}>{st}</button>)}</div>
+</div>
+
+{/* 수익 미리보기 */}
+{form.sell_price&&form.shares&&form.ipo_price&&form.status!=="환불대기"&&<div style={{background:"var(--blue-bg)",borderRadius:12,padding:"12px 14px"}}>
+  <div style={{fontSize:11,color:"var(--blue)",fontWeight:700,marginBottom:8}}>수익 미리보기</div>
+  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
+    {(()=>{const base=toNum(form.ipo_price)*toNum(form.shares);const p2=pct(c.m,base);return[["실제수익",fmt(c.k)+"원",c.k>=0,false],["최종수익",(c.m>=0?"+":"")+c.m.toLocaleString("ko-KR")+"원",c.m>=0,true],["수익률",p2?(Number(p2)>=0?"+":"")+p2+"%":"-",Number(p2)>=0,true]].map(([l,v,pos,colored])=><div key={l} style={{textAlign:"center",background:"var(--card)",borderRadius:8,padding:"8px 4px"}}><div style={{fontSize:9,color:"var(--text3)",marginBottom:3}}>{l}</div><div style={{fontSize:12,fontWeight:700,color:colored?(pos?"var(--blue)":"var(--red)"):"var(--text)"}}>{v}</div></div>)})()}
+  </div>
+</div>}
+
+{/* 저장 버튼 */}
+<button onClick={handleSave} disabled={!form.name||!form.date} style={{...S.btn("p"),width:"100%",opacity:(!form.name||!form.date)?.4:1,marginTop:2}}>{editId?"수정 완료":"추가하기"}</button>
+
+</div>
+</div></div></div>}
+
+{/* ===== 삭제 확인 ===== */}
+{deleteId&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:100,display:"flex",alignItems:"flex-end"}}><div style={{background:"var(--card)",borderRadius:"24px 24px 0 0",width:"100%",padding:"28px 20px 50px"}}><div style={{fontSize:17,fontWeight:800,marginBottom:8}}>거래를 삭제할까요?</div><div style={{fontSize:14,color:"var(--text3)",marginBottom:24}}>삭제하면 되돌릴 수 없어요.</div><div style={{display:"flex",gap:8}}><button onClick={()=>setDeleteId(null)} style={S.btn("s")}>취소</button><button onClick={()=>handleDelete(deleteId)} style={S.btn("d")}>삭제</button></div></div></div>}
+
+</div>}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
