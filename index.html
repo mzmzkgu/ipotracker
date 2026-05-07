@@ -124,7 +124,7 @@ function isActive(v){
   return s==="TRUE"||s==="T"||s==="Y"||s==="YES"||s==="1"||s==="O";
 }
 
-function NewIpoCard({dark}){
+function NewIpoCard({dark,onAddTrade}){
   const[items,setItems]=useState(null); // null=로딩, []=없음, [...]=있음
   const[err,setErr]=useState(null);
   const[open,setOpen]=useState(true);
@@ -195,37 +195,60 @@ function NewIpoCard({dark}){
       {items&&items.length===0&&!err&&<div style={{padding:"18px 0",textAlign:"center",color:"var(--text4)",fontSize:12}}>현재 청약 진행 중인 종목이 없어요</div>}
       {err&&<div style={{padding:"12px",background:"var(--red-bg)",borderRadius:10,fontSize:12,color:"var(--red)"}}>⚠️ {err}<div style={{marginTop:4,color:"var(--text3)",fontSize:11}}>시트 공유 설정이 '링크 있는 모든 사용자 (뷰어)' 인지 확인해주세요</div></div>}
       {items&&items.length>0&&<div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {items.map((r,idx)=><NewIpoItem key={idx} row={r} dark={dark}/>)}
+        {items.map((r,idx)=><NewIpoItem key={idx} row={r} dark={dark} onAddTrade={onAddTrade}/>)}
       </div>}
       {loadedAt&&<div style={{marginTop:10,fontSize:10,color:"var(--text4)",textAlign:"right"}}>업데이트: {new Date(loadedAt).toLocaleTimeString("ko-KR",{hour:"2-digit",minute:"2-digit"})}</div>}
     </>}
   </div>
 }
 
-function NewIpoItem({row,dark}){
+function Tooltip({text,dark}){
+  const[show,setShow]=useState(false);
+  return<span style={{position:"relative",display:"inline-flex",alignItems:"center"}}>
+    <button
+      onClick={e=>{e.stopPropagation();setShow(s=>!s)}}
+      onBlur={()=>setTimeout(()=>setShow(false),150)}
+      style={{background:"none",border:"none",padding:"0 2px",cursor:"pointer",fontSize:11,color:"var(--text4)",fontWeight:700,lineHeight:1,fontFamily:"inherit"}}
+    >(?)</button>
+    {show&&<div style={{position:"absolute",bottom:"calc(100% + 6px)",left:"50%",transform:"translateX(-50%)",background:dark?"#2a2a31":"#1c1c1e",color:"#fff",fontSize:11,padding:"7px 10px",borderRadius:8,whiteSpace:"nowrap",zIndex:300,boxShadow:"0 4px 16px rgba(0,0,0,.3)",pointerEvents:"none",lineHeight:1.5}}>
+      {text}
+      <div style={{position:"absolute",top:"100%",left:"50%",transform:"translateX(-50%)",width:0,height:0,borderLeft:"5px solid transparent",borderRight:"5px solid transparent",borderTop:`5px solid ${dark?"#2a2a31":"#1c1c1e"}`}}/>
+    </div>}
+  </span>
+}
+
+function NewIpoItem({row,dark,onAddTrade}){
   const close=parseDate(row["청약마감일"]);
   const listing=parseDate(row["상장일"]);
-  const nameBroker=(row["증권사"]||"").split(/[,/·;]/).map(s=>s.trim()).filter(Boolean);
+  const brokerList=(row["증권사"]||"").split(/[,/·;]/).map(s=>s.trim()).filter(Boolean);
   const deposits=[
     ["균등",row["증거금_균등"]],
     ["균등+1주",row["증거금_균등1"]],
     ["균등+2주",row["증거금_균등2"]],
     ["균등+3주",row["증거금_균등3"]],
   ].filter(([,v])=>Number(String(v||"").replace(/[^0-9.-]/g,""))>0);
+
+  const instComp=row["기관경쟁률"]?String(row["기관경쟁률"]).trim():"";
+  const lockupRate=row["의무확약률"]?String(row["의무확약률"]).trim():"";
+  const sector=row["업종"]?String(row["업종"]).trim():"";
+
   return<div style={{background:"var(--card)",borderRadius:12,padding:"14px 14px",border:"1px solid var(--divider)"}}>
-    {/* 헤더: 종목명 + 상장일 */}
+    {/* 헤더: 종목명 + 상장일 (빨간색) */}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
       <div style={{fontSize:17,fontWeight:800,color:"var(--text)"}}>{row["종목명"]||"-"}</div>
-      {listing&&<div style={{fontSize:10,color:"var(--text3)",background:"var(--input-bg)",padding:"3px 8px",borderRadius:6,fontWeight:600}}>상장 {listing.getMonth()+1}/{listing.getDate()}</div>}
+      {listing&&<div style={{fontSize:11,color:"var(--red)",background:dark?"rgba(248,113,113,.12)":"#fff5f5",padding:"3px 8px",borderRadius:6,fontWeight:700}}>상장 {listing.getMonth()+1}/{listing.getDate()}</div>}
     </div>
-    {/* 기본 정보 */}
+    {/* 기본 정보 그리드 */}
     <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 10px",fontSize:12,marginBottom:10}}>
-      {nameBroker.length>0&&<><div style={{color:"var(--text3)"}}>증권사</div><div style={{color:"var(--text)",fontWeight:600}}>{nameBroker.join(", ")}</div></>}
-      {row["공모가"]&&<><div style={{color:"var(--text3)"}}>공모가</div><div style={{color:"var(--text)",fontWeight:700}}>{fmtMoney(row["공모가"])}</div></>}
+      {sector&&<><div style={{color:"var(--text3)"}}>업종</div><div style={{color:"var(--text)",fontWeight:500}}>{sector}</div></>}
+      {brokerList.length>0&&<><div style={{color:"var(--text3)"}}>증권사</div><div style={{color:"var(--text)",fontWeight:600}}>{brokerList.join(", ")}</div></>}
+      {row["공모가"]&&<><div style={{color:"var(--text3)"}}>공모가</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtMoney(row["공모가"])}</div></>}
+      {instComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>기관경쟁률<Tooltip text={"높을수록 좋음 (1000:1 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{instComp}</div></>}
+      {lockupRate&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>의무확약률<Tooltip text={"높을수록 좋음 (10% 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{lockupRate}</div></>}
       {close&&<><div style={{color:"var(--text3)"}}>청약마감</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtKDate(close)}</div></>}
     </div>
     {/* 증거금 */}
-    {deposits.length>0&&<div style={{background:"var(--input-bg)",borderRadius:10,padding:"10px 12px",marginBottom:row["한줄코멘트"]?10:0}}>
+    {deposits.length>0&&<div style={{background:"var(--input-bg)",borderRadius:10,padding:"10px 12px",marginBottom:row["한줄코멘트"]||onAddTrade?10:0}}>
       <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:6}}>💰 증거금</div>
       <div style={{display:"flex",flexDirection:"column",gap:4}}>
         {deposits.map(([label,val])=><div key={label} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
@@ -235,9 +258,11 @@ function NewIpoItem({row,dark}){
       </div>
     </div>}
     {/* 한줄 코멘트 */}
-    {row["한줄코멘트"]&&<div style={{fontSize:12,color:dark?"#fde68a":"#92400e",background:dark?"rgba(251,191,36,.08)":"#fffbeb",border:`1px solid ${dark?"rgba(251,191,36,.25)":"#fde68a"}`,borderRadius:10,padding:"8px 10px",lineHeight:1.45}}>
+    {row["한줄코멘트"]&&<div style={{fontSize:12,color:dark?"#fde68a":"#92400e",background:dark?"rgba(251,191,36,.08)":"#fffbeb",border:`1px solid ${dark?"rgba(251,191,36,.25)":"#fde68a"}`,borderRadius:10,padding:"8px 10px",lineHeight:1.45,marginBottom:10}}>
       💬 {row["한줄코멘트"]}
     </div>}
+    {/* 새 거래에 추가하기 버튼 */}
+    {onAddTrade&&<button onClick={()=>onAddTrade(row)} style={{width:"100%",padding:"11px 0",fontSize:13,fontWeight:700,borderRadius:10,border:"none",cursor:"pointer",background:"var(--blue)",color:"#fff",fontFamily:"inherit",letterSpacing:-.3}}>+ 새 거래에 추가하기</button>}
   </div>
 }
 
@@ -314,6 +339,22 @@ const c=calcRow(form);
 const sm=getSM(dark);
 
 const openAdd=()=>{setForm(EMPTY);setEditId(null);setShowForm(true)};
+const openAddFromIpo=row=>{
+  // 증권사 첫번째 값만 추출
+  const brokerList=(row["증권사"]||"").split(/[,/·;]/).map(s=>s.trim()).filter(Boolean);
+  const broker=brokerList[0]||"";
+  // broker가 BROKERS 목록에 있으면 그대로, 없으면 '기타'
+  const brokerVal=BROKERS.includes(broker)?broker:(broker?"기타":"");
+  // 상장일 포맷 변환: parseDate → YYYY-MM-DD
+  const listingD=parseDate(row["상장일"]);
+  const dateStr=listingD?`${listingD.getFullYear()}-${String(listingD.getMonth()+1).padStart(2,"0")}-${String(listingD.getDate()).padStart(2,"0")}`:"";
+  // 공모가 숫자 추출
+  const ipoPriceRaw=Number(String(row["공모가"]||"").replace(/[^0-9.-]/g,""));
+  const ipoPriceStr=ipoPriceRaw?ipoPriceRaw.toLocaleString("ko-KR"):"";
+  setForm({...EMPTY,name:row["종목명"]||"",date:dateStr,broker:brokerVal,ipo_price:ipoPriceStr,status:"환불대기"});
+  setEditId(null);
+  setShowForm(true);
+};
 const openEdit=t=>{setForm({...t});setEditId(t.id);setShowForm(true)};
 const hfc=(k,v)=>setForm(f=>({...f,[k]:v}));
 const handleSave=()=>{
@@ -360,7 +401,7 @@ return<div style={{display:"flex",flexDirection:"column",height:"100vh",maxWidth
 {/* ===== 메인 콘텐츠 ===== */}
 <div style={{padding:"12px 14px 60px",overflowY:"auto",flex:1,WebkitOverflowScrolling:"touch"}}>
 
-{tab==="dashboard"&&<><div style={S.card}><div style={{fontSize:13,fontWeight:600,color:"var(--text3)",marginBottom:16}}>월별 수익</div><div style={{display:"flex",alignItems:"flex-end",gap:3,height:90}}>{monthly.map((v,i)=>{const ht=v===0?2:Math.max(4,(Math.abs(v)/maxBar)*72);return<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}><div style={{fontSize:8,color:"var(--text4)",height:12,display:"flex",alignItems:"flex-end"}}>{v&&Math.abs(v)>=10000?Math.round(v/10000)+"만":""}</div><div style={{width:"100%",height:ht,background:v>=0?"var(--blue)":"#ff6b6b",borderRadius:"3px 3px 0 0",opacity:v===0?.15:1}}/><div style={{fontSize:9,color:"var(--text4)"}}>{i+1}</div></div>})}</div></div><StatusCard trades={trades} dark={dark}/><NewIpoCard dark={dark}/></>}
+{tab==="dashboard"&&<><div style={S.card}><div style={{fontSize:13,fontWeight:600,color:"var(--text3)",marginBottom:16}}>월별 수익</div><div style={{display:"flex",alignItems:"flex-end",gap:3,height:90}}>{monthly.map((v,i)=>{const ht=v===0?2:Math.max(4,(Math.abs(v)/maxBar)*72);return<div key={i} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:3}}><div style={{fontSize:8,color:"var(--text4)",height:12,display:"flex",alignItems:"flex-end"}}>{v&&Math.abs(v)>=10000?Math.round(v/10000)+"만":""}</div><div style={{width:"100%",height:ht,background:v>=0?"var(--blue)":"#ff6b6b",borderRadius:"3px 3px 0 0",opacity:v===0?.15:1}}/><div style={{fontSize:9,color:"var(--text4)"}}>{i+1}</div></div>})}</div></div><StatusCard trades={trades} dark={dark}/><NewIpoCard dark={dark} onAddTrade={openAddFromIpo}/></>}
 
 {tab==="calendar"&&<CalendarTab trades={trades} onEdit={openEdit} dark={dark}/>}
 
