@@ -22,53 +22,53 @@ html,body{height:100%;font-family:'Noto Sans KR',sans-serif;background:var(--bg)
 try{var st=localStorage.getItem('ipo_theme');if(st==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}
 </script>
 <script>
-// ===== 로드 에러 감지 =====
 (function(){
-  var errors = [];
-  var loaded = {react:false, reactdom:false, babel:false};
+  var loaded={react:false,reactdom:false,babel:false};
+  var errShown=false;
 
   function showOverlay(msgs){
-    var d = document.createElement('div');
-    d.id = 'load-err';
-    d.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;padding:24px;font-family:system-ui,sans-serif;overflow:auto;';
-    d.innerHTML = '<div style="max-width:480px;margin:0 auto">'
-      + '<div style="font-size:18px;font-weight:800;color:#ff4747;margin-bottom:16px">⚠️ 로드 실패</div>'
-      + msgs.map(function(m){return '<div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:10px;padding:12px;margin-bottom:10px;font-size:13px;color:#333;word-break:break-all">'+m+'</div>'}).join('')
-      + '<div style="font-size:12px;color:#888;margin-top:16px">이 메시지를 스크린샷 찍어서 공유해주세요</div>'
-      + '</div>';
+    if(errShown)return; errShown=true;
+    var d=document.createElement('div');
+    d.style.cssText='position:fixed;inset:0;background:#fff;z-index:99999;padding:24px 20px;font-family:system-ui,sans-serif;overflow:auto;';
+    var html='<div style="max-width:480px;margin:0 auto">'
+      +'<div style="font-size:20px;font-weight:800;color:#ff4747;margin-bottom:6px">⚠️ 로드 실패</div>'
+      +'<div style="font-size:12px;color:#888;margin-bottom:16px">아래 내용을 스크린샷 찍어서 공유해주세요</div>';
+    msgs.forEach(function(m){
+      html+='<div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:10px;padding:12px 14px;margin-bottom:10px;font-size:13px;color:#222;word-break:break-all;line-height:1.6">'+m+'</div>';
+    });
+    html+='<div style="margin-top:16px;padding:12px 14px;background:#f0f9ff;border-radius:10px;font-size:12px;color:#555;line-height:1.6">'
+      +'<b>브라우저 정보</b><br>'
+      +navigator.userAgent
+      +'</div></div>';
+    d.innerHTML=html;
     document.body.appendChild(d);
   }
 
-  window.addEventListener('load', function(){
-    var msgs = [];
-    if(!loaded.react) msgs.push('❌ React 로드 실패');
-    if(!loaded.reactdom) msgs.push('❌ ReactDOM 로드 실패');
-    if(!loaded.babel) msgs.push('❌ Babel 로드 실패');
-    if(loaded.react && loaded.reactdom && loaded.babel && !document.querySelector('#root > *')){
-      msgs.push('⚠️ React/Babel은 로드됐지만 앱 렌더링 실패 (JSX 파싱 에러 가능성)');
+  // JS 런타임 에러 캐치
+  window.addEventListener('error',function(e){
+    var src=(e.filename||'').split('/').pop();
+    showOverlay(['🔴 <b>JS 에러:</b> '+e.message+'<br><span style="color:#888;font-size:11px">파일: '+src+' / '+e.lineno+'번줄</span>']);
+  },true);
+
+  // Promise 에러 캐치
+  window.addEventListener('unhandledrejection',function(e){
+    showOverlay(['🔴 <b>Promise 에러:</b> '+(e.reason&&e.reason.message||String(e.reason))]);
+  });
+
+  // 페이지 로드 완료 후 체크
+  window.addEventListener('load',function(){
+    if(window.React) loaded.react=true;
+    if(window.ReactDOM) loaded.reactdom=true;
+    if(window.Babel) loaded.babel=true;
+
+    var msgs=[];
+    if(!loaded.react) msgs.push('❌ <b>React</b> 로드 실패 (CDN 차단 또는 네트워크 오류)');
+    if(!loaded.reactdom) msgs.push('❌ <b>ReactDOM</b> 로드 실패');
+    if(!loaded.babel) msgs.push('❌ <b>Babel</b> 로드 실패 (가장 큰 파일 ~6MB, 타임아웃 가능)');
+    if(loaded.react&&loaded.reactdom&&loaded.babel&&!document.querySelector('#root>*')){
+      msgs.push('⚠️ React/Babel 로드 성공했지만 <b>앱 렌더링 실패</b><br><span style="font-size:11px;color:#888">JSX 파싱 에러일 가능성 높음</span>');
     }
-    if(msgs.length > 0) showOverlay(msgs);
-  });
-
-  window.addEventListener('error', function(e){
-    if(document.getElementById('load-err')) return;
-    var src = (e.filename||'').replace(location.origin,'');
-    var msg = '🔴 JS 에러: ' + e.message;
-    if(src) msg += '<br><span style="color:#888">파일: '+src+' ('+e.lineno+'번줄)</span>';
-    showOverlay([msg]);
-  }, true);
-
-  // 각 CDN 스크립트 로드 여부 감지
-  document.addEventListener('DOMContentLoaded', function(){
-    if(window.React) loaded.react = true;
-    if(window.ReactDOM) loaded.reactdom = true;
-    if(window.Babel) loaded.babel = true;
-  });
-  // load 이벤트에서도 체크
-  window.addEventListener('load', function(){
-    if(window.React) loaded.react = true;
-    if(window.ReactDOM) loaded.reactdom = true;
-    if(window.Babel) loaded.babel = true;
+    if(msgs.length>0) showOverlay(msgs);
   });
 })();
 </script>
