@@ -21,6 +21,57 @@ html,body{height:100%;font-family:'Noto Sans KR',sans-serif;background:var(--bg)
 // 저장된 테마 적용
 try{var st=localStorage.getItem('ipo_theme');if(st==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}
 </script>
+<script>
+// ===== 로드 에러 감지 =====
+(function(){
+  var errors = [];
+  var loaded = {react:false, reactdom:false, babel:false};
+
+  function showOverlay(msgs){
+    var d = document.createElement('div');
+    d.id = 'load-err';
+    d.style.cssText = 'position:fixed;inset:0;background:#fff;z-index:99999;padding:24px;font-family:system-ui,sans-serif;overflow:auto;';
+    d.innerHTML = '<div style="max-width:480px;margin:0 auto">'
+      + '<div style="font-size:18px;font-weight:800;color:#ff4747;margin-bottom:16px">⚠️ 로드 실패</div>'
+      + msgs.map(function(m){return '<div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:10px;padding:12px;margin-bottom:10px;font-size:13px;color:#333;word-break:break-all">'+m+'</div>'}).join('')
+      + '<div style="font-size:12px;color:#888;margin-top:16px">이 메시지를 스크린샷 찍어서 공유해주세요</div>'
+      + '</div>';
+    document.body.appendChild(d);
+  }
+
+  window.addEventListener('load', function(){
+    var msgs = [];
+    if(!loaded.react) msgs.push('❌ React 로드 실패');
+    if(!loaded.reactdom) msgs.push('❌ ReactDOM 로드 실패');
+    if(!loaded.babel) msgs.push('❌ Babel 로드 실패');
+    if(loaded.react && loaded.reactdom && loaded.babel && !document.querySelector('#root > *')){
+      msgs.push('⚠️ React/Babel은 로드됐지만 앱 렌더링 실패 (JSX 파싱 에러 가능성)');
+    }
+    if(msgs.length > 0) showOverlay(msgs);
+  });
+
+  window.addEventListener('error', function(e){
+    if(document.getElementById('load-err')) return;
+    var src = (e.filename||'').replace(location.origin,'');
+    var msg = '🔴 JS 에러: ' + e.message;
+    if(src) msg += '<br><span style="color:#888">파일: '+src+' ('+e.lineno+'번줄)</span>';
+    showOverlay([msg]);
+  }, true);
+
+  // 각 CDN 스크립트 로드 여부 감지
+  document.addEventListener('DOMContentLoaded', function(){
+    if(window.React) loaded.react = true;
+    if(window.ReactDOM) loaded.reactdom = true;
+    if(window.Babel) loaded.babel = true;
+  });
+  // load 이벤트에서도 체크
+  window.addEventListener('load', function(){
+    if(window.React) loaded.react = true;
+    if(window.ReactDOM) loaded.reactdom = true;
+    if(window.Babel) loaded.babel = true;
+  });
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
