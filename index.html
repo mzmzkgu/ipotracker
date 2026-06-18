@@ -17,6 +17,20 @@ html,body{height:100%;font-family:'Noto Sans KR',sans-serif;background:var(--bg)
 </head>
 <body>
 <div id="root"></div>
+<div id="error-box" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#1a1a1a;color:#ff6b6b;padding:20px;font-size:13px;font-family:monospace;z-index:9999;overflow:auto;white-space:pre-wrap;word-break:break-all"></div>
+<script>
+window.onerror = function(msg, src, line, col, err) {
+  var box = document.getElementById('error-box');
+  box.style.display = 'block';
+  box.textContent = '❌ JS 에러\n\n' + msg + '\n\n파일: ' + src + '\n줄: ' + line + ':' + col + (err ? '\n\n' + err.stack : '');
+  return false;
+};
+window.addEventListener('unhandledrejection', function(e) {
+  var box = document.getElementById('error-box');
+  box.style.display = 'block';
+  box.textContent += '\n\n❌ Promise 에러\n' + (e.reason && e.reason.stack ? e.reason.stack : String(e.reason));
+});
+</script>
 <script>
 // 저장된 테마 적용
 try{var st=localStorage.getItem('ipo_theme');if(st==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}
