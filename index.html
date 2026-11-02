@@ -258,6 +258,7 @@ function NewIpoItem({row,dark,onAddTrade}){
   const sector=row["업종"]?String(row["업종"]).trim():"";
   const liveComp=row["실시간경쟁률"]?String(row["실시간경쟁률"]).trim():"";   // 청약 기간 중 Pi 크론이 갱신 (10/12/14/15시)
   const liveAt=fmtLiveAt(row["경쟁률기준시각"]);
+  const hasProp=["증거금_균등1","증거금_균등2","증거금_균등3"].some(k=>Number(String(row[k]||"").replace(/[^0-9.-]/g,""))>0);
 
   return<div style={{background:"var(--card)",borderRadius:12,padding:"14px 14px",border:"1px solid var(--divider)"}}>
     {/* 헤더: 종목명 + 상장일 (빨간색) */}
@@ -277,7 +278,7 @@ function NewIpoItem({row,dark,onAddTrade}){
     </div>
     {/* 증거금 */}
     {deposits.length>0&&<div style={{background:"var(--input-bg)",borderRadius:10,padding:"10px 12px",marginBottom:row["한줄코멘트"]||onAddTrade?10:0}}>
-      <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:6}}>💰 증거금</div>
+      <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:6}}>💰 증거금{hasProp&&liveAt&&<span style={{marginLeft:6,fontWeight:500,color:"var(--text4)"}}>(+1~3주는 {liveAt.replace(" 기준","")} 경쟁률 기준)</span>}</div>
       <div style={{display:"flex",flexDirection:"column",gap:4}}>
         {deposits.map(([label,val])=><div key={label} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
           <span style={{color:"var(--text2)"}}>{label}</span>
@@ -363,25 +364,31 @@ function PushRow(){
   </div>
 }
 
-// ========== 청약 마감일 팝업: 오후 2시 이후, 오늘이 청약마감일인 활성(TRUE) 종목 ==========
-const CLOSE_POPUP_HOUR=14;
-const CLOSE_SEEN_KEY="ipo_close_popup_seen";     // 확인 누른 종목 (하루 단위)
-const CLOSE_NOTI_KEY="ipo_close_popup_notified"; // 브라우저 알림 보낸 종목 (하루 단위)
+// ========== 청약 마감일 팝업: 청약마감일 당일, 10시 "마감일입니다" -> 14시 "마감까지 2시간 남았습니다" (활성화 TRUE 종목) ==========
+// 단계별 노출 시간대 [from, to) (기기 시각 기준). 푸시 알림(10시/14시)과 같은 문구를 쓴다.
+const CLOSE_STAGES=[
+  {key:"reminder",from:14,to:16,title:"공모주 청약 마감 2시간 전",text:n=>"["+n+"] 공모주 청약 마감까지 2시간 남았습니다!!"},
+  {key:"open",from:10,to:14,title:"공모주 청약 마감일",text:n=>"["+n+"] 공모주 청약 마감일입니다!!"},
+];
+const CLOSE_SEEN_KEY="ipo_close_popup_seen2";     // 확인 누른 (단계|종목) - 하루 단위
+const CLOSE_NOTI_KEY="ipo_close_popup_notified2"; // 브라우저 알림 보낸 (단계|종목) - 하루 단위
+function closeStage(now){const h=now.getHours();return CLOSE_STAGES.find(s=>h>=s.from&&h<s.to)||null}
 function ymdKey(d){return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()}
 function loadDayMap(k,day){try{const m=JSON.parse(localStorage.getItem(k)||"{}");return m.day===day&&m.names?m:{day,names:{}}}catch(e){return{day,names:{}}}}
 function saveDayMap(k,m){try{localStorage.setItem(k,JSON.stringify(m))}catch(e){}}
 function CloseDayPopup(){
-  const[names,setNames]=useState([]);
+  const[pop,setPop]=useState(null); // {key:단계, names:[종목...]} | null
   const cache=useRef({t:0,rows:[]});
   useEffect(()=>{
     let alive=true,busy=false;
     const check=async()=>{
       if(busy)return;
       const now=new Date();
-      if(now.getHours()<CLOSE_POPUP_HOUR)return;
+      const stage=closeStage(now);
+      if(!stage){if(alive)setPop(null);return}
       busy=true;
       try{
-        // 시트는 14:00 크론이 갱신하므로 5분 캐시 후 다시 읽음
+        // 시트는 크론이 갱신하므로 5분 캐시 후 다시 읽음
         if(Date.now()-cache.current.t>SHEET_CACHE_TTL){
           const res=await fetch(SHEET_GVIZ_URL,{cache:"no-store"});
           if(!res.ok)throw new Error("시트 불러오기 실패 ("+res.status+")");
@@ -393,14 +400,18 @@ function CloseDayPopup(){
         const hit=cache.current.rows.filter(r=>{
           const nm=String(r["종목명"]||"").trim();
           const e=parseDate(r["청약마감일"]);
-          return nm&&isActive(r["활성화"])&&e&&e.getTime()===today&&!seen.names[nm];
+          return nm&&isActive(r["활성화"])&&e&&e.getTime()===today&&!seen.names[stage.key+"|"+nm];
         }).map(r=>String(r["종목명"]).trim());
-        if(alive)setNames(prev=>prev.join("|")===hit.join("|")?prev:hit);
-        // 페이지가 백그라운드 탭일 때만 브라우저 알림 (권한 허용 시, 종목당 하루 1번)
+        if(alive)setPop(prev=>(prev&&prev.key===stage.key&&prev.names.join("|")===hit.join("|"))?prev:(hit.length?{key:stage.key,names:hit}:null));
+        // 페이지가 백그라운드 탭이고 푸시 구독이 없을 때만 브라우저 알림 (푸시가 있으면 중복되므로 생략)
         if(document.hidden&&hit.length&&"Notification"in window&&Notification.permission==="granted"){
-          const nt=loadDayMap(CLOSE_NOTI_KEY,day);
-          hit.forEach(n=>{if(!nt.names[n]){nt.names[n]=1;try{new Notification("공모주 청약 마감일",{body:"["+n+"] 공모주 청약 마감일입니다!!"})}catch(e){}}});
-          saveDayMap(CLOSE_NOTI_KEY,nt);
+          let pushed=false;
+          try{const reg=await navigator.serviceWorker.getRegistration();pushed=!!(reg&&await reg.pushManager.getSubscription())}catch(e){}
+          if(!pushed){
+            const nt=loadDayMap(CLOSE_NOTI_KEY,day);
+            hit.forEach(n=>{const k=stage.key+"|"+n;if(!nt.names[k]){nt.names[k]=1;try{new Notification(stage.title,{body:stage.text(n)})}catch(e){}}});
+            saveDayMap(CLOSE_NOTI_KEY,nt);
+          }
         }
       }catch(e){}finally{busy=false}
     };
@@ -410,17 +421,18 @@ function CloseDayPopup(){
     document.addEventListener("visibilitychange",onVis);
     return()=>{alive=false;clearInterval(id);document.removeEventListener("visibilitychange",onVis)};
   },[]);
-  if(!names.length)return null;
+  if(!pop||!pop.names.length)return null;
+  const stage=CLOSE_STAGES.find(s=>s.key===pop.key);
   const dismiss=()=>{
     const seen=loadDayMap(CLOSE_SEEN_KEY,ymdKey(new Date()));
-    names.forEach(n=>{seen.names[n]=1});
+    pop.names.forEach(n=>{seen.names[pop.key+"|"+n]=1});
     saveDayMap(CLOSE_SEEN_KEY,seen);
-    setNames([]);
+    setPop(null);
   };
   return<div onClick={e=>{if(e.target===e.currentTarget)dismiss()}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
     <div style={{background:"var(--card)",borderRadius:20,padding:"28px 22px 20px",width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 10px 40px rgba(0,0,0,.3)"}}>
       <div style={{fontSize:40,marginBottom:10}}>⏰</div>
-      {names.map(n=><div key={n} style={{fontSize:17,fontWeight:800,color:"var(--text)",lineHeight:1.5,marginBottom:4}}>[{n}] 공모주 청약 마감일입니다!!</div>)}
+      {pop.names.map(n=><div key={n} style={{fontSize:17,fontWeight:800,color:"var(--text)",lineHeight:1.5,marginBottom:4}}>{stage.text(n)}</div>)}
       <button onClick={dismiss} style={{width:"100%",marginTop:18,padding:14,fontSize:15,fontWeight:700,borderRadius:14,border:"none",cursor:"pointer",background:"var(--blue)",color:"#fff",fontFamily:"inherit"}}>확인</button>
     </div>
   </div>
