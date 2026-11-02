@@ -37,6 +37,9 @@ window.addEventListener('unhandledrejection', function(e) {
 // 저장된 테마 적용
 try{var st=localStorage.getItem('ipo_theme');if(st==='dark')document.documentElement.setAttribute('data-theme','dark')}catch(e){}
 </script>
+<script>
+if("serviceWorker"in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener("load",function(){navigator.serviceWorker.register("/sw.js")  /* 허브(mzmzkgu.github.io) 루트 서비스워커를 함께 사용 */.catch(function(e){console.warn("SW 등록 실패",e)})})}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.10/babel.min.js"></script>
@@ -279,6 +282,138 @@ function NewIpoItem({row,dark,onAddTrade}){
   </div>
 }
 
+// ========== 청약 마감일 푸시 알림 (앱이 닫혀 있어도 14:00에 수신) ==========
+const VAPID_PUBLIC="BFT4hZsdJLg9yo2JqyI08rVVKOuoLcNPxo_QJlTFv_YNDswr7FxNwDFOfEf-jV0wmMic2rPjZaciYLZadehZsgI";
+// 구독 정보를 자동 등록할 주소 (구글 Apps Script 웹 앱. 비워두면 '구독 코드 복사' 방식으로만 사용)
+const PUSH_REGISTER_URL="https://script.google.com/macros/s/AKfycbyMLW3c2ts5qJ0fnqExHebGXIGugSDEd9UCnoyT37LSatFSmKGnTmvtf2JnocvIANXStw/exec";
+function b64ToU8(b){const p="=".repeat((4-b.length%4)%4),s=(b+p).replace(/-/g,"+").replace(/_/g,"/"),r=atob(s);return Uint8Array.from([...r].map(c=>c.charCodeAt(0)))}
+function subToCode(sub){return btoa(unescape(encodeURIComponent(JSON.stringify(sub.toJSON()))))}
+// 서버(Apps Script)에 구독 등록/삭제. Content-Type 을 지정하지 않아 text/plain 으로 가고, 사전요청(preflight)이 필요 없다.
+async function pushPost(action,sub){
+  if(!PUSH_REGISTER_URL)return null;
+  const j=sub.toJSON();
+  const r=await fetch(PUSH_REGISTER_URL,{method:"POST",redirect:"follow",body:JSON.stringify({action,endpoint:j.endpoint,keys:j.keys})});
+  const t=await r.json();
+  if(!t.ok)throw new Error(t.error||"서버 등록 실패");
+  return t;
+}
+function PushRow(){
+  const supported="serviceWorker"in navigator&&"PushManager"in window&&"Notification"in window;
+  const[state,setState]=useState("loading"); // loading | off | on | denied | unsupported
+  const[code,setCode]=useState("");
+  const[msg,setMsg]=useState("");
+  const refresh=async()=>{
+    if(!supported){setState("unsupported");return}
+    if(Notification.permission==="denied"){setState("denied");return}
+    try{const reg=await navigator.serviceWorker.getRegistration();const sub=reg&&await reg.pushManager.getSubscription();
+      if(sub){setCode(subToCode(sub));setState("on");
+        try{const last=Number(localStorage.getItem("ipo_push_synced")||0);if(PUSH_REGISTER_URL&&Date.now()-last>864e5){await pushPost("subscribe",sub);localStorage.setItem("ipo_push_synced",String(Date.now()))}}catch(e){}
+      }else setState("off")}catch(e){setState("off")}
+  };
+  useEffect(()=>{refresh()},[]);
+  const turnOn=async()=>{
+    setMsg("");
+    try{
+      const perm=await Notification.requestPermission();
+      if(perm!=="granted"){setState(perm==="denied"?"denied":"off");return}
+      const reg=await navigator.serviceWorker.ready;
+      const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(VAPID_PUBLIC)});
+      if(PUSH_REGISTER_URL){
+        try{await pushPost("subscribe",sub);localStorage.setItem("ipo_push_synced",String(Date.now()));setMsg("알림을 켰어요")}
+        catch(err){try{await sub.unsubscribe()}catch(_){}setState("off");setMsg("서버 등록에 실패해서 알림을 켜지 못했어요. 잠시 후 다시 시도해주세요");return}
+      }
+      setCode(subToCode(sub));setState("on");
+    }catch(e){setMsg("알림을 켜지 못했어요: "+(e.message||e))}
+  };
+  const turnOff=async()=>{
+    try{const reg=await navigator.serviceWorker.getRegistration();const sub=reg&&await reg.pushManager.getSubscription();
+      if(sub){try{await pushPost("unsubscribe",sub)}catch(e){}await sub.unsubscribe()}}catch(e){}
+    try{localStorage.removeItem("ipo_push_synced")}catch(e){}
+    setCode("");setState("off");setMsg("알림을 껐어요 (서버에서도 삭제됐어요)");
+  };
+  const copy=async()=>{try{await navigator.clipboard.writeText(code);setMsg("구독 코드를 복사했어요")}catch(e){setMsg("복사 실패: 코드를 길게 눌러 직접 복사하세요")}};
+  const label={loading:"확인 중...",off:"꺼짐",on:"켜짐",denied:"차단됨",unsupported:"지원 안 함"}[state];
+  return<div style={{padding:"14px 0",borderBottom:"1px solid var(--border)"}}>
+    <div style={{display:"flex",alignItems:"center",gap:12}}>
+      <span style={{fontSize:20}}>🔔</span>
+      <div style={{flex:1,textAlign:"left"}}><div style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>청약 마감일 알림 ({label})</div>
+        <div style={{fontSize:12,color:"var(--text3)"}}>{state==="denied"?"브라우저 설정에서 알림을 허용해주세요":state==="unsupported"?"이 브라우저는 푸시 알림을 지원하지 않아요 (아이폰은 홈 화면에 추가 후 사용)":"청약 마감일 오후 2시에 앱이 닫혀 있어도 알려드려요"}</div></div>
+      {state==="off"&&<button onClick={turnOn} style={{padding:"8px 14px",fontSize:13,fontWeight:700,borderRadius:10,border:"none",cursor:"pointer",background:"var(--blue)",color:"#fff",fontFamily:"inherit"}}>켜기</button>}
+      {state==="on"&&<button onClick={turnOff} style={{padding:"8px 14px",fontSize:13,fontWeight:600,borderRadius:10,border:"none",cursor:"pointer",background:"var(--bg)",color:"var(--text2)",fontFamily:"inherit"}}>끄기</button>}
+    </div>
+    {state!=="unsupported"&&state!=="denied"&&<div style={{marginTop:8,fontSize:11,color:"var(--text4)",lineHeight:1.5}}>알림을 켜면 이 기기의 알림 주소가 서버에 저장되고, 끄면 삭제돼요. <a href="/privacy/" style={{color:"var(--text3)"}}>개인정보 처리방침</a></div>}
+    {state==="on"&&!PUSH_REGISTER_URL&&<div style={{marginTop:10}}>
+      <div style={{fontSize:11,color:"var(--text3)",marginBottom:6}}>서버에 등록할 구독 코드</div>
+      <textarea readOnly value={code} onFocus={e=>e.target.select()} style={{...S.input,height:64,fontSize:10,fontFamily:"monospace",resize:"none"}}/>
+      <button onClick={copy} style={{marginTop:6,width:"100%",padding:10,fontSize:13,fontWeight:600,borderRadius:10,border:"none",cursor:"pointer",background:"var(--input-bg)",color:"var(--text)",fontFamily:"inherit"}}>📋 구독 코드 복사</button>
+    </div>}
+    {msg&&<div style={{marginTop:8,fontSize:12,color:"var(--text3)"}}>{msg}</div>}
+  </div>
+}
+
+// ========== 청약 마감일 팝업: 오후 2시 이후, 오늘이 청약마감일인 활성(TRUE) 종목 ==========
+const CLOSE_POPUP_HOUR=14;
+const CLOSE_SEEN_KEY="ipo_close_popup_seen";     // 확인 누른 종목 (하루 단위)
+const CLOSE_NOTI_KEY="ipo_close_popup_notified"; // 브라우저 알림 보낸 종목 (하루 단위)
+function ymdKey(d){return d.getFullYear()+"-"+(d.getMonth()+1)+"-"+d.getDate()}
+function loadDayMap(k,day){try{const m=JSON.parse(localStorage.getItem(k)||"{}");return m.day===day&&m.names?m:{day,names:{}}}catch(e){return{day,names:{}}}}
+function saveDayMap(k,m){try{localStorage.setItem(k,JSON.stringify(m))}catch(e){}}
+function CloseDayPopup(){
+  const[names,setNames]=useState([]);
+  const cache=useRef({t:0,rows:[]});
+  useEffect(()=>{
+    let alive=true,busy=false;
+    const check=async()=>{
+      if(busy)return;
+      const now=new Date();
+      if(now.getHours()<CLOSE_POPUP_HOUR)return;
+      busy=true;
+      try{
+        // 시트는 14:00 크론이 갱신하므로 5분 캐시 후 다시 읽음
+        if(Date.now()-cache.current.t>SHEET_CACHE_TTL){
+          const res=await fetch(SHEET_GVIZ_URL,{cache:"no-store"});
+          if(!res.ok)throw new Error("시트 불러오기 실패 ("+res.status+")");
+          cache.current={t:Date.now(),rows:parseGviz(await res.text())};
+        }
+        const day=ymdKey(now);
+        const seen=loadDayMap(CLOSE_SEEN_KEY,day);
+        const today=new Date(now.getFullYear(),now.getMonth(),now.getDate()).getTime();
+        const hit=cache.current.rows.filter(r=>{
+          const nm=String(r["종목명"]||"").trim();
+          const e=parseDate(r["청약마감일"]);
+          return nm&&isActive(r["활성화"])&&e&&e.getTime()===today&&!seen.names[nm];
+        }).map(r=>String(r["종목명"]).trim());
+        if(alive)setNames(prev=>prev.join("|")===hit.join("|")?prev:hit);
+        // 페이지가 백그라운드 탭일 때만 브라우저 알림 (권한 허용 시, 종목당 하루 1번)
+        if(document.hidden&&hit.length&&"Notification"in window&&Notification.permission==="granted"){
+          const nt=loadDayMap(CLOSE_NOTI_KEY,day);
+          hit.forEach(n=>{if(!nt.names[n]){nt.names[n]=1;try{new Notification("공모주 청약 마감일",{body:"["+n+"] 공모주 청약 마감일입니다!!"})}catch(e){}}});
+          saveDayMap(CLOSE_NOTI_KEY,nt);
+        }
+      }catch(e){}finally{busy=false}
+    };
+    check();
+    const id=setInterval(check,30*1000);
+    const onVis=()=>{if(!document.hidden)check()};
+    document.addEventListener("visibilitychange",onVis);
+    return()=>{alive=false;clearInterval(id);document.removeEventListener("visibilitychange",onVis)};
+  },[]);
+  if(!names.length)return null;
+  const dismiss=()=>{
+    const seen=loadDayMap(CLOSE_SEEN_KEY,ymdKey(new Date()));
+    names.forEach(n=>{seen.names[n]=1});
+    saveDayMap(CLOSE_SEEN_KEY,seen);
+    setNames([]);
+  };
+  return<div onClick={e=>{if(e.target===e.currentTarget)dismiss()}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24}}>
+    <div style={{background:"var(--card)",borderRadius:20,padding:"28px 22px 20px",width:"100%",maxWidth:340,textAlign:"center",boxShadow:"0 10px 40px rgba(0,0,0,.3)"}}>
+      <div style={{fontSize:40,marginBottom:10}}>⏰</div>
+      {names.map(n=><div key={n} style={{fontSize:17,fontWeight:800,color:"var(--text)",lineHeight:1.5,marginBottom:4}}>[{n}] 공모주 청약 마감일입니다!!</div>)}
+      <button onClick={dismiss} style={{width:"100%",marginTop:18,padding:14,fontSize:15,fontWeight:700,borderRadius:14,border:"none",cursor:"pointer",background:"var(--blue)",color:"#fff",fontFamily:"inherit"}}>확인</button>
+    </div>
+  </div>
+}
+
 const S={card:{background:"var(--card)",borderRadius:16,padding:20,marginBottom:10},input:{width:"100%",boxSizing:"border-box",padding:"12px 12px",fontSize:14,border:"none",borderRadius:10,background:"var(--input-bg)",color:"var(--text)",outline:"none",fontFamily:"inherit"},select:{width:"100%",boxSizing:"border-box",padding:"12px 12px",fontSize:14,border:"none",borderRadius:10,background:"var(--input-bg)",color:"var(--text)",outline:"none",appearance:"none",fontFamily:"inherit",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b95a1' d='M6 8L1 3h10z'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 14px center"},label:{fontSize:11,color:"var(--text3)",fontWeight:500,display:"block",marginBottom:4},btn:v=>({flex:1,padding:15,fontSize:15,fontWeight:600,borderRadius:14,border:"none",cursor:"pointer",fontFamily:"inherit",background:v==="p"?"var(--blue)":v==="d"?"var(--red)":"var(--bg)",color:v==="s"?"var(--text2)":"#fff"}),chip:(st,active,dark)=>{const sm=getSM(dark);return{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,padding:"4px 10px",borderRadius:20,background:active?sm[st]?.bg||"var(--blue-bg)":"var(--bg)",color:active?sm[st]?.text||"var(--blue)":"var(--text3)",fontWeight:active?600:400,cursor:"pointer",border:"none",whiteSpace:"nowrap",fontFamily:"inherit"}}};
 
 function CalendarTab({trades:tr,onEdit,dark}){
@@ -424,7 +559,8 @@ return<div style={{display:"flex",flexDirection:"column",height:"100vh",maxWidth
 {statusPickFor&&<StatusPicker value={trades.find(t=>t.id===statusPickFor)?.status} onChange={st=>quickStatus(statusPickFor,st)} onClose={()=>setStatusPickFor(null)} dark={dark}/>}
 {showExport&&<ExportPicker onSelect={handleExport} onClose={()=>setShowExport(false)}/>}
 {showImport&&<ImportPicker onImport={handleImport} onClose={()=>setShowImport(false)}/>}
-{showSettings&&<BottomSheet onClose={()=>setShowSettings(false)}><div style={{fontSize:16,fontWeight:700,marginBottom:18}}>⚙️ 설정</div>{trades.length>0&&<button onClick={()=>{setShowSettings(false);setTimeout(()=>setShowExport(true),200)}} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"14px 0",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"inherit"}}><span style={{fontSize:20}}>📥</span><div style={{textAlign:"left"}}><div style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>데이터 추출</div><div style={{fontSize:12,color:"var(--text3)"}}>CSV 또는 JSON으로 내보내기</div></div></button>}<button onClick={()=>{setShowSettings(false);setTimeout(()=>setShowImport(true),200)}} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"14px 0",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"inherit"}}><span style={{fontSize:20}}>📤</span><div style={{textAlign:"left"}}><div style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>백업 복구</div><div style={{fontSize:12,color:"var(--text3)"}}>CSV 또는 JSON 파일에서 복구</div></div></button><button onClick={()=>setShowSettings(false)} style={{width:"100%",padding:14,fontSize:15,fontWeight:600,borderRadius:14,border:"none",cursor:"pointer",background:"var(--bg)",color:"var(--text2)",fontFamily:"inherit",marginTop:16}}>닫기</button></BottomSheet>}
+<CloseDayPopup/>
+{showSettings&&<BottomSheet onClose={()=>setShowSettings(false)}><div style={{fontSize:16,fontWeight:700,marginBottom:18}}>⚙️ 설정</div>{trades.length>0&&<button onClick={()=>{setShowSettings(false);setTimeout(()=>setShowExport(true),200)}} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"14px 0",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"inherit"}}><span style={{fontSize:20}}>📥</span><div style={{textAlign:"left"}}><div style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>데이터 추출</div><div style={{fontSize:12,color:"var(--text3)"}}>CSV 또는 JSON으로 내보내기</div></div></button>}<button onClick={()=>{setShowSettings(false);setTimeout(()=>setShowImport(true),200)}} style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"14px 0",background:"none",border:"none",borderBottom:"1px solid var(--border)",cursor:"pointer",fontFamily:"inherit"}}><span style={{fontSize:20}}>📤</span><div style={{textAlign:"left"}}><div style={{fontSize:15,fontWeight:600,color:"var(--text)"}}>백업 복구</div><div style={{fontSize:12,color:"var(--text3)"}}>CSV 또는 JSON 파일에서 복구</div></div></button><PushRow/><button onClick={()=>setShowSettings(false)} style={{width:"100%",padding:14,fontSize:15,fontWeight:600,borderRadius:14,border:"none",cursor:"pointer",background:"var(--bg)",color:"var(--text2)",fontFamily:"inherit",marginTop:16}}>닫기</button></BottomSheet>}
 
 {/* ===== 새 거래 추가 / 수정 폼 (개선된 레이아웃) ===== */}
 {showForm&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:100,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
