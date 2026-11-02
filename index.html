@@ -144,6 +144,15 @@ function fmtKDate(d){
   const dow=["일","월","화","수","목","금","토"][d.getDay()];
   return`${d.getFullYear()}. ${d.getMonth()+1}. ${d.getDate()}(${dow})`;
 }
+// "2026-11-02T12:03:10" -> "오늘 12:03 기준" (네이버가 알려준 데이터 시각 그대로 표시)
+function fmtLiveAt(s){
+  const m=String(s||"").match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+  if(!m)return"";
+  const d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3])),t=new Date();t.setHours(0,0,0,0);
+  const diff=Math.round((t-d)/864e5);
+  const day=diff===0?"오늘":diff===1?"어제":Number(m[2])+"/"+Number(m[3]);
+  return day+" "+m[4]+":"+m[5]+" 기준";
+}
 function fmtMoney(v){
   const n=Number(String(v||"").replace(/[^0-9.-]/g,""));
   if(!n||isNaN(n))return"-";
@@ -247,6 +256,8 @@ function NewIpoItem({row,dark,onAddTrade}){
   const instComp=row["기관경쟁률"]?String(row["기관경쟁률"]).trim():"";
   const lockupRate=row["의무확약률"]?String(row["의무확약률"]).trim():"";
   const sector=row["업종"]?String(row["업종"]).trim():"";
+  const liveComp=row["실시간경쟁률"]?String(row["실시간경쟁률"]).trim():"";   // 청약 기간 중 Pi 크론이 갱신 (10/12/14/15시)
+  const liveAt=fmtLiveAt(row["경쟁률기준시각"]);
 
   return<div style={{background:"var(--card)",borderRadius:12,padding:"14px 14px",border:"1px solid var(--divider)"}}>
     {/* 헤더: 종목명 + 상장일 (빨간색) */}
@@ -260,6 +271,7 @@ function NewIpoItem({row,dark,onAddTrade}){
       {brokerList.length>0&&<><div style={{color:"var(--text3)"}}>증권사</div><div style={{color:"var(--text)",fontWeight:600}}>{brokerList.join(", ")}</div></>}
       {row["공모가"]&&<><div style={{color:"var(--text3)"}}>공모가</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtMoney(row["공모가"])}</div></>}
       {instComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>기관경쟁률<Tooltip text={"높을수록 좋음 (1000:1 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{instComp}</div></>}
+      {liveComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>실시간경쟁<Tooltip text={"일반청약 전체 경쟁률 (청약수량 ÷ 배정수량). 청약 마감까지 계속 바뀌어요"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:700}}>{liveComp}{liveAt&&<span style={{marginLeft:6,fontSize:11,fontWeight:500,color:"var(--text3)"}}>({liveAt})</span>}</div></>}
       {lockupRate&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>의무확약률<Tooltip text={"높을수록 좋음 (10% 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{lockupRate}</div></>}
       {close&&<><div style={{color:"var(--text3)"}}>청약마감</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtKDate(close)}</div></>}
     </div>
