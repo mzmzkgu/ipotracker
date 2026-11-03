@@ -148,10 +148,7 @@ function fmtKDate(d){
 function fmtLiveAt(s){
   const m=String(s||"").match(/(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
   if(!m)return"";
-  const d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3])),t=new Date();t.setHours(0,0,0,0);
-  const diff=Math.round((t-d)/864e5);
-  const day=diff===0?"오늘":diff===1?"어제":Number(m[2])+"/"+Number(m[3]);
-  return day+" "+m[4]+":"+m[5]+" 기준";
+  return m[1].slice(2)+"."+m[2]+"."+m[3]+" "+m[4]+":"+m[5]+" 기준";
 }
 function fmtMoney(v){
   const n=Number(String(v||"").replace(/[^0-9.-]/g,""));
@@ -247,10 +244,10 @@ function NewIpoItem({row,dark,onAddTrade}){
   const listing=parseDate(row["상장일"]);
   const brokerList=(row["증권사"]||"").split(/[,/·;]/).map(s=>s.trim()).filter(Boolean);
   const deposits=[
-    ["균등",row["증거금_균등"]],
-    ["균등+1주",row["증거금_균등1"]],
-    ["균등+2주",row["증거금_균등2"]],
-    ["균등+3주",row["증거금_균등3"]],
+    ["균등분",row["증거금_균등"]],
+    ["균등분 + 비례1주",row["증거금_균등1"]],
+    ["균등분 + 비례2주",row["증거금_균등2"]],
+    ["균등분 + 비례3주",row["증거금_균등3"]],
   ].filter(([,v])=>Number(String(v||"").replace(/[^0-9.-]/g,""))>0);
 
   const instComp=row["기관경쟁률"]?String(row["기관경쟁률"]).trim():"";
@@ -258,7 +255,6 @@ function NewIpoItem({row,dark,onAddTrade}){
   const sector=row["업종"]?String(row["업종"]).trim():"";
   const liveComp=row["실시간경쟁률"]?String(row["실시간경쟁률"]).trim():"";   // 청약 기간 중 Pi 크론이 갱신 (10/12/14/15시)
   const liveAt=fmtLiveAt(row["경쟁률기준시각"]);
-  const hasProp=["증거금_균등1","증거금_균등2","증거금_균등3"].some(k=>Number(String(row[k]||"").replace(/[^0-9.-]/g,""))>0);
 
   return<div style={{background:"var(--card)",borderRadius:12,padding:"14px 14px",border:"1px solid var(--divider)"}}>
     {/* 헤더: 종목명 + 상장일 (빨간색) */}
@@ -272,18 +268,21 @@ function NewIpoItem({row,dark,onAddTrade}){
       {brokerList.length>0&&<><div style={{color:"var(--text3)"}}>증권사</div><div style={{color:"var(--text)",fontWeight:600}}>{brokerList.join(", ")}</div></>}
       {row["공모가"]&&<><div style={{color:"var(--text3)"}}>공모가</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtMoney(row["공모가"])}</div></>}
       {instComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>기관경쟁률<Tooltip text={"높을수록 좋음 (1000:1 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{instComp}</div></>}
-      {liveComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>실시간경쟁<Tooltip text={"일반청약 전체 경쟁률 (청약수량 ÷ 배정수량). 청약 마감까지 계속 바뀌어요"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:700}}>{liveComp}{liveAt&&<span style={{marginLeft:6,fontSize:11,fontWeight:500,color:"var(--text3)"}}>({liveAt})</span>}</div></>}
+      {liveComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>실시간경쟁<Tooltip text={"일반청약 전체 경쟁률 (청약수량 ÷ 배정수량). 청약 마감까지 계속 바뀌어요"} dark={dark}/></div><div style={{color:"var(--blue)",fontWeight:700}}>{liveComp}{liveAt&&<span style={{marginLeft:6,fontSize:11,fontWeight:500,color:"var(--text3)"}}>({liveAt})</span>}</div></>}
       {lockupRate&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>의무확약률<Tooltip text={"높을수록 좋음 (10% 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{lockupRate}</div></>}
       {close&&<><div style={{color:"var(--text3)"}}>청약마감</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtKDate(close)}</div></>}
     </div>
     {/* 증거금 */}
     {deposits.length>0&&<div style={{background:"var(--input-bg)",borderRadius:10,padding:"10px 12px",marginBottom:row["한줄코멘트"]||onAddTrade?10:0}}>
-      <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:6}}>💰 증거금{hasProp&&liveAt&&<span style={{marginLeft:6,fontWeight:500,color:"var(--text4)"}}>(+1~3주는 {liveAt.replace(" 기준","")} 경쟁률 기준)</span>}</div>
+      <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:6}}>💰 증거금<span style={{marginLeft:6,fontWeight:500,color:"var(--text4)"}}>(최소 청약 금액)</span></div>
       <div style={{display:"flex",flexDirection:"column",gap:4}}>
-        {deposits.map(([label,val])=><div key={label} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
-          <span style={{color:"var(--text2)"}}>{label}</span>
-          <span style={{color:"var(--text)",fontWeight:600}}>{fmtMoney(val)}</span>
-        </div>)}
+        {deposits.map(([label,val],idx)=>{
+          const num=v=>Number(String(v||"").replace(/[^0-9.-]/g,""));
+          const sameAsBase=idx>0&&num(val)===num(row["증거금_균등"]);   // 경쟁이 낮으면 비례분 금액이 균등분과 같아짐
+          return<div key={label} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
+            <span style={{color:"var(--text2)"}}>{label}</span>
+            <span style={{color:"var(--text)",fontWeight:600}}>{sameAsBase&&<span style={{marginRight:6,fontSize:10,fontWeight:500,color:"var(--text4)"}}>균등분과 같음</span>}{fmtMoney(val)}</span>
+          </div>})}
       </div>
     </div>}
     {/* 한줄 코멘트 */}
