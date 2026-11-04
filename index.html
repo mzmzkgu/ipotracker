@@ -263,7 +263,7 @@ function NewIpoItem({row,dark,onAddTrade}){
   // 현재(실시간) 경쟁률 기준 비례분 청약금: 마감 예상 값이 아직 없을 때만 대체용으로 쓴다
   const nowRows=[["균등분 + 비례1주",row["증거금_균등1"]],["균등분 + 비례2주",row["증거금_균등2"]],["균등분 + 비례3주",row["증거금_균등3"]]].filter(([,v])=>Number(String(v||"").replace(/[^0-9.-]/g,""))>0);
 
-  const instComp=row["기관경쟁률"]?String(row["기관경쟁률"]).trim():"";
+  const instComp=row["기관경쟁률"]?String(row["기관경쟁률"]).trim().replace(/,/g,""):"";
   const lockupRate=row["의무확약률"]?String(row["의무확약률"]).trim():"";
   const sector=row["업종"]?String(row["업종"]).trim():"";
   const rec=recommendation(row);
@@ -274,8 +274,11 @@ function NewIpoItem({row,dark,onAddTrade}){
   const usePred=preds.length>0;                    // 마감 예상 값이 있으면 그것을, 없으면 현재 경쟁률 기준 값을 보여준다
   const propRows=usePred?preds:nowRows;
   const baseDep=row["증거금_균등"];
+  // 청약 수량 = 증거금 ÷ (공모가 × 증거금율). 증거금율은 일반 공모 50%, 스팩 100%. 딱 떨어지지 않으면(직접 수정한 금액 등) 수량은 표시하지 않는다.
+  const unitDep=numOf(row["공모가"])*(/스팩|기업인수목적/.test(row["종목명"]||"")?1:0.5);
+  const qtyOf=v=>{const q=unitDep>0?numOf(v)/unitDep:0;return q>0&&Math.abs(q-Math.round(q))<0.01?Math.round(q):0};
   const showDep=numOf(baseDep)>0||propRows.length>0;
-  const liveComp=row["실시간경쟁률"]?String(row["실시간경쟁률"]).trim():"";   // 청약 기간 중 Pi 크론이 갱신 (10/12/14/15시)
+  const liveComp=row["실시간경쟁률"]?String(row["실시간경쟁률"]).trim().replace(/,/g,""):"";   // 청약 기간 중 Pi 크론이 갱신 (10/12/14/15시)
   const liveAt=fmtLiveAt(row["경쟁률기준시각"]);
 
   return<div style={{background:"var(--card)",borderRadius:12,padding:"14px 14px",border:"1px solid var(--divider)"}}>
@@ -292,7 +295,7 @@ function NewIpoItem({row,dark,onAddTrade}){
       {row["공모가"]&&<><div style={{color:"var(--text3)"}}>공모가</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtMoney(row["공모가"])}</div></>}
       {lockupRate&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>의무확약률<Tooltip text={"높을수록 좋음 (10% 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{lockupRate}</div></>}
       {instComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>기관경쟁률<Tooltip text={"높을수록 좋음 (1000:1 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{instComp}</div></>}
-      {predComp>0&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>최종경쟁률<Tooltip text={"직전 다른 공모주 경쟁률을 참고한 수치"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:700}}>{Math.round(predComp).toLocaleString("ko-KR")}:1<span style={{marginLeft:6,fontSize:11,fontWeight:500,color:"var(--text3)"}}>(예상)</span></div></>}
+      {predComp>0&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>최종경쟁률<Tooltip text={"직전 다른 공모주 경쟁률을 참고한 수치"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:700}}>{Math.round(predComp)}:1<span style={{marginLeft:6,fontSize:11,fontWeight:500,color:"var(--text3)"}}>(예상)</span></div></>}
       {liveComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>실시간경쟁<Tooltip text={"청약 마감까지 계속 변합니다"} dark={dark}/></div><div style={{color:"var(--blue)",fontWeight:700}}>{liveComp}{liveAt&&<span style={{marginLeft:6,fontSize:11,fontWeight:500,color:"var(--text3)"}}>({liveAt})</span>}</div></>}
       {close&&<><div style={{color:"var(--text3)"}}>청약마감</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtKDate(close)}</div></>}
     </div>
@@ -302,9 +305,11 @@ function NewIpoItem({row,dark,onAddTrade}){
       <div style={{display:"flex",flexDirection:"column",gap:4}}>
         {[...(numOf(baseDep)>0?[["균등분",baseDep]]:[]),...propRows].map(([label,val],idx,arr)=>{
           const sameAsBase=label!=="균등분"&&numOf(val)===numOf(baseDep);   // 경쟁이 낮으면 비례분 금액이 균등분과 같아짐
-          return<div key={label} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
-            <span style={{color:"var(--text2)"}}>{label}</span>
-            <span style={{color:"var(--text)",fontWeight:600}}>{sameAsBase&&<span style={{marginRight:6,fontSize:10,fontWeight:500,color:"var(--text4)"}}>균등분과 같음</span>}{fmtMoney(val)}</span>
+          const q=qtyOf(val);
+          return<div key={label} style={{display:"grid",gridTemplateColumns:"1fr auto auto",columnGap:10,alignItems:"baseline",fontSize:12}}>
+            <span style={{color:"var(--text2)"}}>{label}{sameAsBase&&<span style={{marginLeft:6,fontSize:10,fontWeight:500,color:"var(--text4)"}}>균등분과 같음</span>}</span>
+            <span style={{minWidth:50,textAlign:"right",fontSize:11,color:"var(--text3)"}}>{q>0?q.toLocaleString("ko-KR")+"주":""}</span>
+            <span style={{minWidth:86,textAlign:"right",color:"var(--text)",fontWeight:600}}>{fmtMoney(val)}</span>
           </div>})}
       </div>
       <div style={{marginTop:8,fontSize:10,color:"var(--text4)",lineHeight:1.4}}>{usePred?"최종경쟁률과 예상 증거금은 추정값으로 실제와 다를 수 있습니다":"예상 증거금은 현재 경쟁률 기준 추정값으로 실제와 다를 수 있습니다"}</div>
