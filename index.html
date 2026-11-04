@@ -164,7 +164,7 @@ function recommendation(row){
 // 풍선형 박스 배지: 꼬리 없이 모서리를 둥글게 처리한 알약(pill) 모양
 function RecBubble({level,dark}){
   const t=level==="강력 추천"?{bg:"var(--green)",fg:"#fff"}:level==="추천"?{bg:dark?"rgba(16,185,129,.2)":"#d1fae5",fg:dark?"#6ee7b7":"#047857"}:{bg:"var(--input-bg)",fg:"var(--text2)"};
-  return<div style={{background:t.bg,color:t.fg,fontSize:12,fontWeight:800,padding:"6px 13px",borderRadius:999,whiteSpace:"nowrap",marginLeft:12,flexShrink:0,letterSpacing:-.2}}>{level}</div>
+  return<div style={{background:t.bg,color:t.fg,fontSize:12,fontWeight:800,padding:"6px 13px",borderRadius:999,whiteSpace:"nowrap",flexShrink:0,letterSpacing:-.2}}>{level}</div>
 }
 function fmtMoney(v){
   const n=Number(String(v||"").replace(/[^0-9.-]/g,""));
@@ -233,7 +233,7 @@ function NewIpoCard({dark,onAddTrade}){
   const count=items?items.length:0;
 
   return<div style={{...S.card,border:"1.5px dashed var(--blue)",background:dark?"rgba(96,165,250,.06)":"#f5faff"}}>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:open?12:0}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:open?4:0}}>
       <div onClick={()=>setOpen(o=>!o)} style={{flex:1,display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
         <span style={{display:"inline-block",fontSize:10,fontWeight:800,padding:"3px 7px",borderRadius:6,background:"var(--blue)",color:"#fff",letterSpacing:.3}}>New</span>
         <span style={{fontSize:14,fontWeight:700,color:"var(--text)"}}>신규 청약 정보</span>
@@ -243,6 +243,7 @@ function NewIpoCard({dark,onAddTrade}){
       <button onClick={e=>{e.stopPropagation();setRefreshKey(k=>k+1)}} style={{background:"var(--input-bg)",border:"none",borderRadius:8,width:28,height:28,fontSize:12,cursor:"pointer",marginLeft:8,color:"var(--text3)"}} title="새로고침">↻</button>
     </div>
     {open&&<>
+      <div style={{marginBottom:10,fontSize:11,color:"var(--text4)"}}>참고 자료이며 투자 권유가 아닙니다</div>
       {items===null&&<div style={{padding:"18px 0",textAlign:"center",color:"var(--text3)",fontSize:13}}>불러오는 중...</div>}
       {items&&items.length===0&&!err&&<div style={{padding:"18px 0",textAlign:"center",color:"var(--text4)",fontSize:12}}>현재 청약 진행 중인 종목이 없어요</div>}
       {err&&<div style={{padding:"12px",background:"var(--red-bg)",borderRadius:10,fontSize:12,color:"var(--red)"}}>⚠️ {err}<div style={{marginTop:4,color:"var(--text3)",fontSize:11}}>시트 공유 설정이 '링크 있는 모든 사용자 (뷰어)' 인지 확인해주세요</div></div>}
@@ -278,17 +279,11 @@ function NewIpoItem({row,dark,onAddTrade}){
   const liveAt=fmtLiveAt(row["경쟁률기준시각"]);
 
   return<div style={{background:"var(--card)",borderRadius:12,padding:"14px 14px",border:"1px solid var(--divider)"}}>
-    {/* 헤더: 종목명(왼쪽) + 청약 추천 풍선(같은 줄 오른쪽 끝), 아래 줄에 상장일/직접수정 표시 */}
-    <div style={{marginBottom:10}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-        <div style={{fontSize:17,fontWeight:800,color:"var(--text)"}}>{row["종목명"]||"-"}</div>
-        {rec&&<RecBubble level={rec} dark={dark}/>}
-      </div>
-      {(listing||isManual)&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}>
-        {listing&&<span style={{fontSize:11,color:"var(--red)",background:dark?"rgba(248,113,113,.12)":"#fff5f5",padding:"3px 8px",borderRadius:6,fontWeight:700}}>상장 {listing.getMonth()+1}/{listing.getDate()}</span>}
-        {isManual&&<span style={{fontSize:11,color:"var(--text3)",background:"var(--input-bg)",padding:"3px 8px",borderRadius:6,fontWeight:600}}>✏️ 청약금 직접 수정</span>}
-      </div>}
-      {rec&&<div style={{marginTop:5,fontSize:10,color:"var(--text4)",lineHeight:1.4}}>기관경쟁률 {REC_INST_MIN}:1 이상 · 의무확약률 {REC_LOCK_MIN}% 이상을 둘 다 충족하면 강력 추천, 하나만 충족하면 추천, 둘 다 미달이면 비추천 (참고용이며 투자 권유가 아닙니다)</div>}
+    {/* 헤더 한 줄: 종목명(왼쪽) ... 상장일 칩 + 청약 추천 배지(오른쪽 끝) */}
+    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+      <div style={{flex:"1 1 auto",minWidth:0,fontSize:17,fontWeight:800,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row["종목명"]||"-"}</div>
+      {listing&&<span style={{flexShrink:0,fontSize:11,color:"var(--red)",background:dark?"rgba(248,113,113,.12)":"#fff5f5",padding:"3px 8px",borderRadius:6,fontWeight:700,whiteSpace:"nowrap"}}>상장 {listing.getMonth()+1}/{listing.getDate()}</span>}
+      {rec&&<RecBubble level={rec} dark={dark}/>}
     </div>
     {/* 경쟁률(기관 / 실시간 / 최종 예상)을 맨 위에, 그 아래 기본 정보 */}
     <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 10px",fontSize:12,marginBottom:10}}>
@@ -303,7 +298,7 @@ function NewIpoItem({row,dark,onAddTrade}){
     </div>
     {/* 마감 예상 증거금 (증거금 + 마감 예상 청약금 통합): 균등분 / 균등분 + 비례 1~3주 */}
     {showDep&&<div style={{background:"var(--input-bg)",borderRadius:10,padding:"10px 12px",marginBottom:(row["한줄코멘트"]||onAddTrade)?10:0}}>
-      <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:6}}>💰 {usePred?"마감 예상 증거금":"증거금"}</div>
+      <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:6}}>💰 {usePred?"마감 예상 증거금":"증거금"}{isManual&&<span style={{marginLeft:8,fontWeight:500,color:"var(--text3)"}}>✏️ 청약금 직접 수정</span>}</div>
       <div style={{display:"flex",flexDirection:"column",gap:4}}>
         {[...(numOf(baseDep)>0?[["균등분",baseDep]]:[]),...propRows].map(([label,val],idx,arr)=>{
           const sameAsBase=label!=="균등분"&&numOf(val)===numOf(baseDep);   // 경쟁이 낮으면 비례분 금액이 균등분과 같아짐
