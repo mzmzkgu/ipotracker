@@ -150,6 +150,22 @@ function fmtLiveAt(s){
   if(!m)return"";
   return m[1].slice(2)+"."+m[2]+"."+m[3]+" "+m[4]+":"+m[5]+" 기준";
 }
+// 청약 추천 3단계: 기관경쟁률 500:1 이상 AND 의무확약률 10% 이상 -> 강력 추천 / 둘 중 하나만 충족 -> 추천 / 둘 다 미달 -> 비추천.
+// 수요예측 결과가 아직 없거나 의무확약률이 없는 종목(스팩 등)은 판정하지 않는다.
+const REC_INST_MIN=500, REC_LOCK_MIN=10;
+function parseInstRatio(s){const m=String(s||"").replace(/,/g,"").match(/^\s*([\d.]+)\s*:\s*1/);return m?Number(m[1]):null}
+function parsePct(s){const t=String(s||"").replace(/,/g,"").trim();if(!/^-?[\d.]+\s*%?$/.test(t))return null;const v=parseFloat(t);return t.includes("%")?v:(Math.abs(v)<=1?v*100:v)}
+function recommendation(row){
+  const g=parseInstRatio(row["기관경쟁률"]),h=parsePct(row["의무확약률"]);
+  if(g==null||h==null)return null;
+  const a=g>=REC_INST_MIN,b=h>=REC_LOCK_MIN;
+  return a&&b?"강력 추천":(a||b)?"추천":"비추천";
+}
+// 풍선형 박스 배지: 꼬리 없이 모서리를 둥글게 처리한 알약(pill) 모양
+function RecBubble({level,dark}){
+  const t=level==="강력 추천"?{bg:"var(--green)",fg:"#fff"}:level==="추천"?{bg:dark?"rgba(16,185,129,.2)":"#d1fae5",fg:dark?"#6ee7b7":"#047857"}:{bg:"var(--input-bg)",fg:"var(--text2)"};
+  return<div style={{background:t.bg,color:t.fg,fontSize:12,fontWeight:800,padding:"6px 13px",borderRadius:999,whiteSpace:"nowrap",marginLeft:12,flexShrink:0,letterSpacing:-.2}}>{level}</div>
+}
 function fmtMoney(v){
   const n=Number(String(v||"").replace(/[^0-9.-]/g,""));
   if(!n||isNaN(n))return"-";
@@ -243,47 +259,60 @@ function NewIpoItem({row,dark,onAddTrade}){
   const close=parseDate(row["청약마감일"]);
   const listing=parseDate(row["상장일"]);
   const brokerList=(row["증권사"]||"").split(/[,/·;]/).map(s=>s.trim()).filter(Boolean);
-  const deposits=[
-    ["균등분",row["증거금_균등"]],
-    ["균등분 + 비례1주",row["증거금_균등1"]],
-    ["균등분 + 비례2주",row["증거금_균등2"]],
-    ["균등분 + 비례3주",row["증거금_균등3"]],
-  ].filter(([,v])=>Number(String(v||"").replace(/[^0-9.-]/g,""))>0);
+  // 현재(실시간) 경쟁률 기준 비례분 청약금: 마감 예상 값이 아직 없을 때만 대체용으로 쓴다
+  const nowRows=[["균등분 + 비례1주",row["증거금_균등1"]],["균등분 + 비례2주",row["증거금_균등2"]],["균등분 + 비례3주",row["증거금_균등3"]]].filter(([,v])=>Number(String(v||"").replace(/[^0-9.-]/g,""))>0);
 
   const instComp=row["기관경쟁률"]?String(row["기관경쟁률"]).trim():"";
   const lockupRate=row["의무확약률"]?String(row["의무확약률"]).trim():"";
   const sector=row["업종"]?String(row["업종"]).trim():"";
+  const rec=recommendation(row);
+  const isManual=isActive(row["직접수정"]);   // 시트에서 사용자가 비례분 청약금을 직접 수정한 행 (그 칸만 자동 갱신 안 함)
+  const numOf=v=>Number(String(v||"").replace(/[^0-9.-]/g,""));
+  const predComp=numOf(row["예상최종경쟁률"]),predMult=numOf(row["예상배수"]);
+  const preds=[["균등분 + 비례1주",row["예상비례1주"]],["균등분 + 비례2주",row["예상비례2주"]],["균등분 + 비례3주",row["예상비례3주"]]].filter(([,v])=>numOf(v)>0);
+  const usePred=preds.length>0;                    // 마감 예상 값이 있으면 그것을, 없으면 현재 경쟁률 기준 값을 보여준다
+  const propRows=usePred?preds:nowRows;
+  const baseDep=row["증거금_균등"];
+  const showDep=numOf(baseDep)>0||propRows.length>0;
   const liveComp=row["실시간경쟁률"]?String(row["실시간경쟁률"]).trim():"";   // 청약 기간 중 Pi 크론이 갱신 (10/12/14/15시)
   const liveAt=fmtLiveAt(row["경쟁률기준시각"]);
 
   return<div style={{background:"var(--card)",borderRadius:12,padding:"14px 14px",border:"1px solid var(--divider)"}}>
-    {/* 헤더: 종목명 + 상장일 (빨간색) */}
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-      <div style={{fontSize:17,fontWeight:800,color:"var(--text)"}}>{row["종목명"]||"-"}</div>
-      {listing&&<div style={{fontSize:11,color:"var(--red)",background:dark?"rgba(248,113,113,.12)":"#fff5f5",padding:"3px 8px",borderRadius:6,fontWeight:700}}>상장 {listing.getMonth()+1}/{listing.getDate()}</div>}
+    {/* 헤더: 종목명(왼쪽) + 청약 추천 풍선(같은 줄 오른쪽 끝), 아래 줄에 상장일/직접수정 표시 */}
+    <div style={{marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{fontSize:17,fontWeight:800,color:"var(--text)"}}>{row["종목명"]||"-"}</div>
+        {rec&&<RecBubble level={rec} dark={dark}/>}
+      </div>
+      {(listing||isManual)&&<div style={{display:"flex",alignItems:"center",gap:6,marginTop:6,flexWrap:"wrap"}}>
+        {listing&&<span style={{fontSize:11,color:"var(--red)",background:dark?"rgba(248,113,113,.12)":"#fff5f5",padding:"3px 8px",borderRadius:6,fontWeight:700}}>상장 {listing.getMonth()+1}/{listing.getDate()}</span>}
+        {isManual&&<span style={{fontSize:11,color:"var(--text3)",background:"var(--input-bg)",padding:"3px 8px",borderRadius:6,fontWeight:600}}>✏️ 청약금 직접 수정</span>}
+      </div>}
+      {rec&&<div style={{marginTop:5,fontSize:10,color:"var(--text4)",lineHeight:1.4}}>기관경쟁률 {REC_INST_MIN}:1 이상 · 의무확약률 {REC_LOCK_MIN}% 이상을 둘 다 충족하면 강력 추천, 하나만 충족하면 추천, 둘 다 미달이면 비추천 (참고용이며 투자 권유가 아닙니다)</div>}
     </div>
-    {/* 기본 정보 그리드 */}
+    {/* 경쟁률(기관 / 실시간 / 최종 예상)을 맨 위에, 그 아래 기본 정보 */}
     <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:"6px 10px",fontSize:12,marginBottom:10}}>
+      {instComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>기관경쟁률<Tooltip text={"높을수록 좋음 (1000:1 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{instComp}</div></>}
+      {liveComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>실시간경쟁<Tooltip text={"일반청약 전체 경쟁률 (청약수량 ÷ 배정수량). 청약 마감까지 계속 바뀌어요"} dark={dark}/></div><div style={{color:"var(--blue)",fontWeight:700}}>{liveComp}{liveAt&&<span style={{marginLeft:6,fontSize:11,fontWeight:500,color:"var(--text3)"}}>({liveAt})</span>}</div></>}
+      {predComp>0&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>최종경쟁률<Tooltip text={"기관경쟁률"+(predMult>0?" × 과거 평균 배수 "+predMult.toFixed(2):"")+"로 계산한 예상값이에요. 인기가 식는 종목은 실제가 훨씬 낮을 수 있어요"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:700}}>{Math.round(predComp).toLocaleString("ko-KR")}:1<span style={{marginLeft:6,fontSize:11,fontWeight:500,color:"var(--text3)"}}>(예상)</span></div></>}
       {sector&&<><div style={{color:"var(--text3)"}}>업종</div><div style={{color:"var(--text)",fontWeight:500}}>{sector}</div></>}
       {brokerList.length>0&&<><div style={{color:"var(--text3)"}}>증권사</div><div style={{color:"var(--text)",fontWeight:600}}>{brokerList.join(", ")}</div></>}
       {row["공모가"]&&<><div style={{color:"var(--text3)"}}>공모가</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtMoney(row["공모가"])}</div></>}
-      {instComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>기관경쟁률<Tooltip text={"높을수록 좋음 (1000:1 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{instComp}</div></>}
-      {liveComp&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>실시간경쟁<Tooltip text={"일반청약 전체 경쟁률 (청약수량 ÷ 배정수량). 청약 마감까지 계속 바뀌어요"} dark={dark}/></div><div style={{color:"var(--blue)",fontWeight:700}}>{liveComp}{liveAt&&<span style={{marginLeft:6,fontSize:11,fontWeight:500,color:"var(--text3)"}}>({liveAt})</span>}</div></>}
       {lockupRate&&<><div style={{color:"var(--text3)",display:"flex",alignItems:"center",gap:2}}>의무확약률<Tooltip text={"높을수록 좋음 (10% 이상 추천)"} dark={dark}/></div><div style={{color:"var(--text)",fontWeight:600}}>{lockupRate}</div></>}
       {close&&<><div style={{color:"var(--text3)"}}>청약마감</div><div style={{color:"var(--red)",fontWeight:700}}>{fmtKDate(close)}</div></>}
     </div>
-    {/* 증거금 */}
-    {deposits.length>0&&<div style={{background:"var(--input-bg)",borderRadius:10,padding:"10px 12px",marginBottom:row["한줄코멘트"]||onAddTrade?10:0}}>
-      <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:6}}>💰 증거금<span style={{marginLeft:6,fontWeight:500,color:"var(--text4)"}}>(최소 청약 금액)</span></div>
+    {/* 마감 예상 증거금 (증거금 + 마감 예상 청약금 통합): 균등분 / 균등분 + 비례 1~3주 */}
+    {showDep&&<div style={{background:"var(--input-bg)",borderRadius:10,padding:"10px 12px",marginBottom:(row["한줄코멘트"]||onAddTrade)?10:0}}>
+      <div style={{fontSize:11,color:"var(--text3)",fontWeight:600,marginBottom:6}}>💰 {usePred?"마감 예상 증거금":"증거금"}</div>
       <div style={{display:"flex",flexDirection:"column",gap:4}}>
-        {deposits.map(([label,val],idx)=>{
-          const num=v=>Number(String(v||"").replace(/[^0-9.-]/g,""));
-          const sameAsBase=idx>0&&num(val)===num(row["증거금_균등"]);   // 경쟁이 낮으면 비례분 금액이 균등분과 같아짐
+        {[...(numOf(baseDep)>0?[["균등분",baseDep]]:[]),...propRows].map(([label,val],idx,arr)=>{
+          const sameAsBase=label!=="균등분"&&numOf(val)===numOf(baseDep);   // 경쟁이 낮으면 비례분 금액이 균등분과 같아짐
           return<div key={label} style={{display:"flex",justifyContent:"space-between",fontSize:12}}>
             <span style={{color:"var(--text2)"}}>{label}</span>
             <span style={{color:"var(--text)",fontWeight:600}}>{sameAsBase&&<span style={{marginRight:6,fontSize:10,fontWeight:500,color:"var(--text4)"}}>균등분과 같음</span>}{fmtMoney(val)}</span>
           </div>})}
       </div>
+      <div style={{marginTop:8,fontSize:10,color:"var(--text4)",lineHeight:1.4}}>{usePred?"최종경쟁률과 예상 증거금은 추정값으로 실제와 다를 수 있습니다":"예상 증거금은 현재 경쟁률 기준 추정값으로 실제와 다를 수 있습니다"}</div>
     </div>}
     {/* 한줄 코멘트 */}
     {row["한줄코멘트"]&&<div style={{fontSize:12,color:dark?"#fde68a":"#92400e",background:dark?"rgba(251,191,36,.08)":"#fffbeb",border:`1px solid ${dark?"rgba(251,191,36,.25)":"#fde68a"}`,borderRadius:10,padding:"8px 10px",lineHeight:1.45,marginBottom:10}}>
